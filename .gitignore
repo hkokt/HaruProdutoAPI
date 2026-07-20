@@ -1,0 +1,6 @@
+target/
+.idea/
+.vscode/
+*.iml
+
+docker/.env

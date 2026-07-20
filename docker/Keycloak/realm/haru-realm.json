@@ -1,0 +1,40 @@
+{
+  "realm": "haru",
+  "enabled": true,
+  "displayName": "Haru Produto API",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "clients": [
+    {
+      "clientId": "haru-api",
+      "name": "Haru API",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "redirectUris": ["http://localhost/*"],
+      "webOrigins": ["http://localhost"],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost/*"
+      },
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "roles",
+        "profile",
+        "basic",
+        "email"
+      ]
+    }
+  ],
+  "roles": {
+    "realm": [
+      { "name": "produto-read", "description": "Consultar produtos" },
+      { "name": "produto-write", "description": "Criar e alterar produtos" }
+    ]
+  }
+}
