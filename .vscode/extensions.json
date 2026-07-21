@@ -1,0 +1,13 @@
+{
+  "recommendations": [
+    "vscjava.vscode-java-pack",
+    "vmware.vscode-boot-dev-pack",
+    "ms-azuretools.vscode-containers",
+    "redhat.vscode-yaml",
+    "humao.rest-client",
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-pg",
+    "sonarsource.sonarlint-vscode",
+    "editorconfig.editorconfig"
+  ]
+}

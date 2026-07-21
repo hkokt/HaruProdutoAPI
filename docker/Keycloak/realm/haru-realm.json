@@ -2,8 +2,13 @@
   "realm": "haru",
   "enabled": true,
   "displayName": "Haru Produto API",
-  "registrationAllowed": false,
+  "registrationAllowed": true,
   "loginWithEmailAllowed": true,
+  "defaultRoles": [
+    "offline_access",
+    "uma_authorization",
+    "customer"
+  ],
   "accessTokenLifespan": 300,
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 36000,
@@ -16,10 +21,16 @@
       "publicClient": true,
       "directAccessGrantsEnabled": true,
       "standardFlowEnabled": true,
-      "redirectUris": ["http://localhost/*"],
-      "webOrigins": ["http://localhost"],
+      "redirectUris": [
+        "http://localhost/*",
+        "https://bookish-fiesta-vjv9rggj4jjcxrvw-80.app.github.dev/*"
+      ],
+      "webOrigins": [
+        "http://localhost",
+        "https://bookish-fiesta-vjv9rggj4jjcxrvw-80.app.github.dev"
+      ],
       "attributes": {
-        "post.logout.redirect.uris": "http://localhost/*"
+        "post.logout.redirect.uris": "http://localhost/*##https://bookish-fiesta-vjv9rggj4jjcxrvw-80.app.github.dev/*"
       },
       "defaultClientScopes": [
         "web-origins",
@@ -33,8 +44,8 @@
   ],
   "roles": {
     "realm": [
-      { "name": "produto-read", "description": "Consultar produtos" },
-      { "name": "produto-write", "description": "Criar e alterar produtos" }
+      { "name": "admin", "description": "Administrador da API" },
+      { "name": "customer", "description": "Cliente da API" }
     ]
   }
 }

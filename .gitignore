@@ -1,6 +1,11 @@
 target/
 .idea/
-.vscode/
+.gitattributes
+.mvn/
+.vscode/*
+!.vscode/extensions.json
 *.iml
+
+
 
 docker/.env

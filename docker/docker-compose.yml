@@ -13,6 +13,7 @@ x-api-common: &api-common
     SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${APP_DB_NAME:-haru_produto}
     SPRING_DATASOURCE_USERNAME: ${APP_DB_USER:-haru}
     SPRING_DATASOURCE_PASSWORD: ${APP_DB_PASSWORD:-haru_local_password}
+    HARU_SECURITY_OAUTH2_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-haru-api}
     SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_PUBLIC_URL:-http://localhost/auth}/realms/${KEYCLOAK_REALM:-haru}
     SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:-haru}/protocol/openid-connect/certs
     JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75.0 -XX:+UseContainerSupport}
@@ -70,6 +71,7 @@ services:
       KC_HTTP_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: /auth
       KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME: ${KEYCLOAK_PUBLIC_URL:-http://localhost/auth}
       KC_PROXY_HEADERS: xforwarded
       KC_HOSTNAME_STRICT: "false"
     volumes:
