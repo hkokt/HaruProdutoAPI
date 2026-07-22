@@ -1,4 +1,4 @@
-name: haru-produto-api
+name: haru-product-api
 
 x-api-common: &api-common
   build:
@@ -10,12 +10,13 @@ x-api-common: &api-common
   environment: &api-environment
     SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker}
     SERVER_PORT: 8080
-    SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${APP_DB_NAME:-haru_produto}
+    SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${APP_DB_NAME:-haru_product}
     SPRING_DATASOURCE_USERNAME: ${APP_DB_USER:-haru}
     SPRING_DATASOURCE_PASSWORD: ${APP_DB_PASSWORD:-haru_local_password}
     HARU_SECURITY_OAUTH2_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-haru-api}
     SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_PUBLIC_URL:-http://localhost/auth}/realms/${KEYCLOAK_REALM:-haru}
     SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:-haru}/protocol/openid-connect/certs
+    SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${KEYCLOAK_AUDIENCE:-haru-api}
     JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75.0 -XX:+UseContainerSupport}
   depends_on:
     postgres:
@@ -35,7 +36,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_local_password}
-      APP_DB_NAME: ${APP_DB_NAME:-haru_produto}
+      APP_DB_NAME: ${APP_DB_NAME:-haru_product}
       APP_DB_USER: ${APP_DB_USER:-haru}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:-haru_local_password}
       KEYCLOAK_DB_NAME: ${KEYCLOAK_DB_NAME:-keycloak}

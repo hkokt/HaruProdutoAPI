@@ -1,7 +1,7 @@
 {
   "realm": "haru",
   "enabled": true,
-  "displayName": "Haru Produto API",
+  "displayName": "Haru Product API",
   "registrationAllowed": true,
   "loginWithEmailAllowed": true,
   "defaultRoles": [
@@ -32,6 +32,20 @@
       "attributes": {
         "post.logout.redirect.uris": "http://localhost/*##https://bookish-fiesta-vjv9rggj4jjcxrvw-80.app.github.dev/*"
       },
+      "protocolMappers": [
+        {
+          "name": "haru-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "haru-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ],
       "defaultClientScopes": [
         "web-origins",
         "acr",
@@ -44,8 +58,8 @@
   ],
   "roles": {
     "realm": [
-      { "name": "admin", "description": "Administrador da API" },
-      { "name": "customer", "description": "Cliente da API" }
+      { "name": "admin", "description": "API administrator" },
+      { "name": "customer", "description": "API customer" }
     ]
   }
 }
