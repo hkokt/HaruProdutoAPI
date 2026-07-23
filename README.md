@@ -81,8 +81,11 @@ uses the common offset envelope: `content`, `offset`, `limit`, `totalElements`,
 `hasPrevious`, and `hasNext`. `offset` defaults to 0, while `limit` defaults to
 20 and accepts at most 50 items. Product search results contain the product ID,
 name, SKU, type, default measurement unit, active state, and relevance score.
-The index uses the Elasticsearch Brazilian analyzer for product text, exact and
-prefix matching for SKU, and a boosted exact match for numeric IDs.
+The index uses the Elasticsearch Brazilian analyzer for product text,
+`search_as_you_type` name fields for autocomplete prefixes, exact and prefix
+matching for SKU, and a boosted exact match for numeric IDs. The current index
+generation is `haru-products-v2`; changing an incompatible mapping requires a
+new index generation followed by reindexing from PostgreSQL.
 
 The main inventory and production searches use the same server-side pagination
 contract:

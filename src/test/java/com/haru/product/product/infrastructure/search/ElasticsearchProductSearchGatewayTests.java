@@ -35,7 +35,7 @@ import com.haru.product.shared.pagination.OffsetPageResponse;
 class ElasticsearchProductSearchGatewayTests {
 
 	private static final String ELASTICSEARCH_URL = "http://elasticsearch:9200";
-	private static final String INDEX_NAME = "haru-products-v1";
+	private static final String INDEX_NAME = "haru-products-v2";
 	private static final String INDEX_URL = ELASTICSEARCH_URL + "/" + INDEX_NAME;
 
 	private MockRestServiceServer server;
@@ -69,6 +69,10 @@ class ElasticsearchProductSearchGatewayTests {
 				.andExpect(jsonPath("$.settings.analysis.normalizer.sku_normalizer.filter[1]").value("asciifolding"))
 				.andExpect(jsonPath("$.mappings.dynamic").value("strict"))
 				.andExpect(jsonPath("$.mappings.properties.name.analyzer").value("brazilian"))
+				.andExpect(jsonPath("$.mappings.properties.name.fields.autocomplete.type")
+						.value("search_as_you_type"))
+				.andExpect(jsonPath("$.mappings.properties.name.fields.autocomplete.analyzer")
+						.value("brazilian"))
 				.andExpect(jsonPath("$.mappings.properties.description.analyzer").value("brazilian"))
 				.andExpect(jsonPath("$.mappings.properties.sku.normalizer").value("sku_normalizer"))
 				.andRespond(withStatus(HttpStatus.OK));
@@ -136,7 +140,8 @@ class ElasticsearchProductSearchGatewayTests {
 				.andExpect(jsonPath("$.query.bool.should[0].term.id.value").value(42))
 				.andExpect(jsonPath("$.query.bool.should[0].term.id.boost").value(20.0))
 				.andExpect(jsonPath("$.query.bool.should[1].match.sku.query").value("42"))
-				.andExpect(jsonPath("$.query.bool.should[4].multi_match.query").value("42"))
+				.andExpect(jsonPath("$.query.bool.should[4].multi_match.type").value("bool_prefix"))
+				.andExpect(jsonPath("$.query.bool.should[5].multi_match.query").value("42"))
 				.andExpect(jsonPath("$.sort[0]._score.order").value("desc"))
 				.andExpect(jsonPath("$.sort[1].id.order").value("asc"))
 				.andRespond(withSuccess(searchResponse(), MediaType.APPLICATION_JSON));
@@ -170,10 +175,18 @@ class ElasticsearchProductSearchGatewayTests {
 				.andExpect(jsonPath("$.query.bool.should[2].match_phrase.name.query")
 						.value("Perfume de Sakura"))
 				.andExpect(jsonPath("$.query.bool.should[3].multi_match.query").value("Perfume de Sakura"))
-				.andExpect(jsonPath("$.query.bool.should[3].multi_match.fields[0]").value("name^5"))
-				.andExpect(jsonPath("$.query.bool.should[3].multi_match.fields[1]").value("description"))
-				.andExpect(jsonPath("$.query.bool.should[3].multi_match.fuzziness").value("AUTO"))
-				.andExpect(jsonPath("$.query.bool.should[3].multi_match.operator").value("and"))
+				.andExpect(jsonPath("$.query.bool.should[3].multi_match.type").value("bool_prefix"))
+				.andExpect(jsonPath("$.query.bool.should[3].multi_match.fields[0]")
+						.value("name.autocomplete^6"))
+				.andExpect(jsonPath("$.query.bool.should[3].multi_match.fields[1]")
+						.value("name.autocomplete._2gram^4"))
+				.andExpect(jsonPath("$.query.bool.should[3].multi_match.fields[2]")
+						.value("name.autocomplete._3gram^3"))
+				.andExpect(jsonPath("$.query.bool.should[4].multi_match.query").value("Perfume de Sakura"))
+				.andExpect(jsonPath("$.query.bool.should[4].multi_match.fields[0]").value("name^5"))
+				.andExpect(jsonPath("$.query.bool.should[4].multi_match.fields[1]").value("description"))
+				.andExpect(jsonPath("$.query.bool.should[4].multi_match.fuzziness").value("AUTO"))
+				.andExpect(jsonPath("$.query.bool.should[4].multi_match.operator").value("and"))
 				.andRespond(withSuccess(emptySearchResponse(), MediaType.APPLICATION_JSON));
 
 		OffsetPageResponse<ProductSearchResultResponse> response = gateway.search(

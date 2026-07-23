@@ -43,7 +43,7 @@ public class ElasticsearchProductSearchGateway implements ProductSearchGateway {
 	@Autowired
 	public ElasticsearchProductSearchGateway(
 			@Value("${haru.search.elasticsearch.url:http://localhost:9200}") String elasticsearchUrl,
-			@Value("${haru.search.elasticsearch.products-index:haru-products-v1}") String indexName,
+			@Value("${haru.search.elasticsearch.products-index:haru-products-v2}") String indexName,
 			@Value("${haru.search.elasticsearch.connect-timeout:2s}") Duration connectTimeout,
 			@Value("${haru.search.elasticsearch.read-timeout:5s}") Duration readTimeout) {
 		this(
@@ -273,6 +273,14 @@ public class ElasticsearchProductSearchGateway implements ProductSearchGateway {
 		alternatives.add(Map.of(
 				"multi_match", Map.of(
 						"query", query,
+						"type", "bool_prefix",
+						"fields", List.of(
+								"name.autocomplete^6",
+								"name.autocomplete._2gram^4",
+								"name.autocomplete._3gram^3"))));
+		alternatives.add(Map.of(
+				"multi_match", Map.of(
+						"query", query,
 						"fields", List.of("name^5", "description"),
 						"type", "best_fields",
 						"operator", "and",
@@ -397,7 +405,11 @@ public class ElasticsearchProductSearchGateway implements ProductSearchGateway {
 		properties.put("name", Map.of(
 				"type", "text",
 				"analyzer", "brazilian",
-				"fields", Map.of("keyword", Map.of("type", "keyword", "ignore_above", 150))));
+				"fields", Map.of(
+						"autocomplete", Map.of(
+								"type", "search_as_you_type",
+								"analyzer", "brazilian"),
+						"keyword", Map.of("type", "keyword", "ignore_above", 150))));
 		properties.put("description", Map.of("type", "text", "analyzer", "brazilian"));
 		properties.put("sku", Map.of("type", "keyword", "normalizer", "sku_normalizer"));
 		properties.put("type", Map.of("type", "keyword"));
