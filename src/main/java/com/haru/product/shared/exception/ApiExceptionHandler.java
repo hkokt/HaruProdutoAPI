@@ -15,7 +15,6 @@ import com.haru.product.inventory.domain.exception.InventoryLotNotFoundException
 import com.haru.product.product.application.exception.InvalidProductSearchRequestException;
 import com.haru.product.product.application.exception.ProductSearchUnavailableException;
 import com.haru.product.product.domain.exception.DuplicateProductComponentException;
-import com.haru.product.product.domain.exception.DuplicateProductSkuException;
 import com.haru.product.product.domain.exception.InvalidProductCompositionException;
 import com.haru.product.product.domain.exception.ProductComponentNotFoundException;
 import com.haru.product.product.domain.exception.ProductCompositionCycleException;
@@ -68,7 +67,6 @@ public class ApiExceptionHandler {
 	}
 
 	@ExceptionHandler({
-			DuplicateProductSkuException.class,
 			DuplicateProductComponentException.class,
 			DuplicateInventoryLotException.class,
 			DuplicateProducedLotException.class

@@ -24,12 +24,13 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import com.haru.product.product.application.dto.ProductDeletionResult;
-import com.haru.product.product.application.dto.ProductSearchPageResponse;
+import com.haru.product.product.application.dto.ProductSearchResultResponse;
 import com.haru.product.product.application.exception.ProductSearchUnavailableException;
 import com.haru.product.product.application.exception.ProductSearchVersionConflictException;
 import com.haru.product.product.application.search.ProductSearchDocument;
 import com.haru.product.product.domain.MeasurementUnit;
 import com.haru.product.product.domain.ProductType;
+import com.haru.product.shared.pagination.OffsetPageResponse;
 
 class ElasticsearchProductSearchGatewayTests {
 
@@ -127,7 +128,7 @@ class ElasticsearchProductSearchGatewayTests {
 		expectExistingIndex();
 		server.expect(requestTo(INDEX_URL + "/_search"))
 				.andExpect(method(HttpMethod.POST))
-				.andExpect(jsonPath("$.from").value(10))
+				.andExpect(jsonPath("$.from").value(15))
 				.andExpect(jsonPath("$.size").value(10))
 				.andExpect(jsonPath("$.track_total_hits").value(true))
 				.andExpect(jsonPath("$.query.bool.filter[0].term.deleted").value(false))
@@ -140,12 +141,13 @@ class ElasticsearchProductSearchGatewayTests {
 				.andExpect(jsonPath("$.sort[1].id.order").value("asc"))
 				.andRespond(withSuccess(searchResponse(), MediaType.APPLICATION_JSON));
 
-		ProductSearchPageResponse response = gateway.search("42", 1, 10);
+		OffsetPageResponse<ProductSearchResultResponse> response = gateway.search("42", 15, 10);
 
-		assertThat(response.page()).isEqualTo(1);
-		assertThat(response.size()).isEqualTo(10);
+		assertThat(response.offset()).isEqualTo(15);
+		assertThat(response.limit()).isEqualTo(10);
 		assertThat(response.totalElements()).isEqualTo(21);
-		assertThat(response.totalPages()).isEqualTo(3);
+		assertThat(response.hasPrevious()).isTrue();
+		assertThat(response.hasNext()).isTrue();
 		assertThat(response.content()).singleElement().satisfies(product -> {
 			assertThat(product.id()).isEqualTo(42L);
 			assertThat(product.name()).isEqualTo("Perfume Sakura");
@@ -174,15 +176,16 @@ class ElasticsearchProductSearchGatewayTests {
 				.andExpect(jsonPath("$.query.bool.should[3].multi_match.operator").value("and"))
 				.andRespond(withSuccess(emptySearchResponse(), MediaType.APPLICATION_JSON));
 
-		ProductSearchPageResponse response = gateway.search("Perfume de Sakura", 0, 20);
+		OffsetPageResponse<ProductSearchResultResponse> response = gateway.search(
+				"Perfume de Sakura", 0, 20);
 
 		assertThat(response.content()).isEmpty();
 		assertThat(response.totalElements()).isZero();
-		assertThat(response.totalPages()).isZero();
+		assertThat(response.hasNext()).isFalse();
 	}
 
 	@Test
-	void capsTotalPagesAtTheAccessibleResultWindow() {
+	void stopsPaginationAtTheAccessibleResultWindowWithoutHidingTheRealTotal() {
 		expectExistingIndex();
 		server.expect(requestTo(INDEX_URL + "/_search"))
 				.andExpect(method(HttpMethod.POST))
@@ -190,10 +193,30 @@ class ElasticsearchProductSearchGatewayTests {
 						searchResponse().replace("\"value\": 21", "\"value\": 25000"),
 						MediaType.APPLICATION_JSON));
 
-		ProductSearchPageResponse response = gateway.search("Sakura", 0, 20);
+		OffsetPageResponse<ProductSearchResultResponse> response = gateway.search("Sakura", 9_999, 1);
 
 		assertThat(response.totalElements()).isEqualTo(25_000);
-		assertThat(response.totalPages()).isEqualTo(500);
+		assertThat(response.hasPrevious()).isTrue();
+		assertThat(response.hasNext()).isFalse();
+	}
+
+	@Test
+	void browsesLiveProductsWithAStableDescendingIdSort() {
+		expectExistingIndex();
+		server.expect(requestTo(INDEX_URL + "/_search"))
+				.andExpect(method(HttpMethod.POST))
+				.andExpect(jsonPath("$.from").value(0))
+				.andExpect(jsonPath("$.size").value(20))
+				.andExpect(jsonPath("$.query.bool.filter[0].term.deleted").value(false))
+				.andExpect(jsonPath("$.query.bool.should").doesNotHaveJsonPath())
+				.andExpect(jsonPath("$.sort[0].id.order").value("desc"))
+				.andRespond(withSuccess(emptySearchResponse(), MediaType.APPLICATION_JSON));
+
+		var response = gateway.search("", 0, 20);
+
+		assertThat(response.content()).isEmpty();
+		assertThat(response.hasPrevious()).isFalse();
+		assertThat(response.hasNext()).isFalse();
 	}
 
 	@Test

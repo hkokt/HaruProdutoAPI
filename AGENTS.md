@@ -70,6 +70,12 @@ The root Java package is `com.haru.product`.
 - `src/main/resources/db/migration/V4__harden_database_invariants.sql`:
   PostgreSQL enum/lifecycle checks, the FEFO index, and database-enforced
   append-only inventory movements.
+- `src/main/resources/db/migration/V5__automate_product_sku.sql`: the global
+  product-SKU sequence, legacy-sequence initialization, and database-enforced
+  SKU immutability.
+- `src/main/resources/db/migration/V6__index_production_order_search.sql`:
+  deterministic production-order search indexes for unfiltered and
+  status-filtered pagination.
 - `src/test/java`: executable specifications for context loading, security,
   and the Keycloak realm.
 - `docker/docker-compose.yml`: complete local environment topology.
@@ -344,9 +350,14 @@ Dockerfile.
 ## Product and BOM contracts
 
 - Product IDs and composition IDs are `Long` identity values.
-- SKU is user supplied, whitespace-normalized, at most 60 characters, and
-  unique case-insensitively. Both the application check and PostgreSQL
-  `LOWER(sku)` unique index must be preserved.
+- Product creation obtains an automatic SKU from PostgreSQL in the fixed
+  `PRD-##########` format. The global bounded sequence is safe across API
+  replicas, does not cycle, and may contain gaps after rolled-back
+  transactions. Existing SKUs are preserved.
+- SKU is immutable after insertion. Create and update requests do not accept
+  it; the JPA field is non-updatable and V5 rejects direct database changes.
+  Preserve the PostgreSQL `LOWER(sku)` unique index as the final integrity
+  guarantee.
 - A BOM component has only its product, positive quantity, and measurement
   unit. Do not add inventory, lot, expiry, availability, or cost data.
 - A product cannot contain itself, repeat a direct component, use an inactive
@@ -402,7 +413,7 @@ The Product and BOM endpoints are:
 
 ```text
 POST   /api/products
-GET    /api/products/search?q={query}&page={page}&size={size}
+GET    /api/products/search?q={query}&offset={offset}&limit={limit}
 GET    /api/products/{id}
 PUT    /api/products/{id}
 DELETE /api/products/{id}
@@ -447,7 +458,12 @@ authentication failures, authorization failures, and unexpected exceptions.
   per consumed lot.
 - FEFO consumption reads candidates in first-page batches of 100 instead of
   loading every eligible lot. Product lot and movement history endpoints are
-  paginated with a default of 50 and a server-side maximum of 200 rows.
+  paginated by offset with a default of 20 and a server-side maximum of 50 rows.
+- The inventory overview pages catalog products through Elasticsearch, then
+  aggregates availability and lot counts in one PostgreSQL query for the
+  returned product IDs. It preserves catalog order and includes products with
+  no lots. Its optional query matches product name, numeric ID, or SKU and uses
+  the same 10,000-result window as product search.
 - Direct-consumption callers cannot claim system-owned reference types such as
   `INVENTORY_LOT`, `INVENTORY_ADJUSTMENT`, or `PRODUCTION_ORDER`.
 - Consumption uses a conditional database update that requires enough balance,
@@ -461,9 +477,10 @@ The Inventory endpoints are:
 ```text
 POST /api/inventory/lots
 GET  /api/inventory/lots/{id}
-GET  /api/inventory/products/{productId}/lots
+GET  /api/inventory/products/search?q={query}&offset={offset}&limit={limit}
+GET  /api/inventory/products/{productId}/lots?offset={offset}&limit={limit}
 GET  /api/inventory/products/{productId}/availability
-GET  /api/inventory/products/{productId}/movements
+GET  /api/inventory/products/{productId}/movements?offset={offset}&limit={limit}
 POST /api/inventory/lots/{lotId}/adjustments/in
 POST /api/inventory/lots/{lotId}/adjustments/out
 POST /api/inventory/products/{productId}/consumption
@@ -479,6 +496,10 @@ completion generates the dedicated `PRODUCTION_CONSUMPTION` and
 - Production-order statuses are `CREATED`, `IN_PROGRESS`, `COMPLETED`, and
   `CANCELLED`. Only `CREATED` orders can start, and only `IN_PROGRESS` orders
   can complete. Completed and cancelled orders cannot be completed again.
+- Production-order search is paginated by offset with a default of 20 and a
+  maximum of 50 rows. Its optional query matches order ID, product ID, product
+  name, or SKU; an optional status filter is applied in PostgreSQL. Results are
+  ordered deterministically by creation time and order ID, both descending.
 - Creating an order requires a positive `NUMERIC(19,6)` quantity and a final
   product with a direct BOM. Completion reloads and revalidates that BOM so a
   topology change cannot silently produce without components.
@@ -517,6 +538,7 @@ The production endpoints are:
 
 ```text
 POST /api/production-orders
+GET  /api/production-orders/search?q={query}&status={status}&offset={offset}&limit={limit}
 GET  /api/production-orders/{id}
 POST /api/production-orders/{id}/start
 POST /api/production-orders/{id}/complete
@@ -525,7 +547,7 @@ POST /api/production-orders/{id}/cancel
 
 ## Database hardening contracts
 
-- V1-V4 are immutable history; add a later migration for future schema
+- V1-V6 are immutable history; add a later migration for future schema
   changes rather than editing an applied migration.
 - Persisted Product, BOM, Inventory, and Production enum strings are restricted
   by PostgreSQL checks, in addition to Java enums.
@@ -533,9 +555,12 @@ POST /api/production-orders/{id}/cancel
   V4.
 - The FEFO index order is `(product_id, status, expiration_date ASC NULLS LAST,
   id ASC)` and mirrors the repository query. Preserve both sides together.
-- Case-insensitive SKU uniqueness comes from the `LOWER(sku)` unique index;
-  lot uniqueness comes from `(product_id, lot_number)`; production output has
-  unique order and inventory-lot links.
+- Product SKU generation comes from the bounded, non-cycling
+  `product_sku_sequence`; V5 initializes it above legacy automatic SKUs and
+  rejects SKU updates through a trigger. Case-insensitive uniqueness still
+  comes from the `LOWER(sku)` unique index. Lot uniqueness comes from
+  `(product_id, lot_number)`; production output has unique order and
+  inventory-lot links.
 - All quantities and costs use the exact `NUMERIC` precision declared in the
   migrations. Do not introduce floating-point persistence for these values.
 
@@ -550,9 +575,9 @@ The suite covers:
 - the Sakura BOM scenario, invalid quantities, missing/inactive/self/duplicate
   components, `SERVICE` restrictions, and direct/indirect cycle prevention;
 - JPA mapping and explicit repository fetch-plan requirements, plus the
-  structure of V1-V4 migrations;
-- application-service SKU uniqueness, bounded composition-tree mapping, and a
-  5,000-level iterative cycle-validation stress case;
+  structure of V1-V6 migrations;
+- automatic SKU generation and immutability, bounded composition-tree mapping,
+  and a 5,000-level iterative cycle-validation stress case;
 - all Product/BOM endpoints, request validation, `ProblemDetail`, and
   optimistic-lock error responses with standalone MockMvc;
 - inventory lot and movement invariants, JPA mappings, V2 migration structure,
@@ -566,7 +591,7 @@ The suite covers:
   traceability, invalid states, and concurrent orders disputing the same
   balance;
 - real PostgreSQL enum/lifecycle checks and movement append-only behavior;
-- deterministic races for case-insensitive SKU creation, lot creation,
+- deterministic races for distinct automatic SKU generation, lot creation,
   Product optimistic updates, and ProductionOrder optimistic transitions;
 - sanitized 401, 403, 404, 405, 406, 415, validation, database, optimistic,
   and unexpected-error responses.
@@ -582,7 +607,7 @@ relative to the repository and must run from its root.
 `PersistenceHardeningIntegrationTests` use `disabledWithoutDocker = true`, so
 always inspect Maven's skipped-test count; a green build without Docker does
 not prove the PostgreSQL or concurrent paths. With Docker available, the suite
-currently runs all 216 tests successfully with no skipped tests.
+currently runs all 222 tests successfully with no skipped tests.
 
 The persistence-hardening race tests coordinate Spring Data spy calls through
 the transaction-bound `JdbcTemplate` and shared `EntityManager` proxy. Do not

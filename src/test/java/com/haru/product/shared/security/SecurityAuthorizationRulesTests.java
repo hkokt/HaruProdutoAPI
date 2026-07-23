@@ -84,6 +84,8 @@ class SecurityAuthorizationRulesTests {
 	void customerCanReadInventory() throws Exception {
 		mockMvc.perform(get("/api/inventory/lots/1").with(keycloakJwt(customerJwt())))
 				.andExpect(status().isOk());
+		mockMvc.perform(get("/api/inventory/products/search").with(keycloakJwt(customerJwt())))
+				.andExpect(status().isOk());
 		mockMvc.perform(get("/api/inventory/products/1/lots").with(keycloakJwt(customerJwt())))
 				.andExpect(status().isOk());
 		mockMvc.perform(get("/api/inventory/products/1/availability").with(keycloakJwt(customerJwt())))
@@ -95,6 +97,8 @@ class SecurityAuthorizationRulesTests {
 	@Test
 	void customerCanReadProductionOrders() throws Exception {
 		mockMvc.perform(get("/api/production-orders/1").with(keycloakJwt(customerJwt())))
+				.andExpect(status().isOk());
+		mockMvc.perform(get("/api/production-orders/search").with(keycloakJwt(customerJwt())))
 				.andExpect(status().isOk());
 	}
 
@@ -203,7 +207,11 @@ class SecurityAuthorizationRulesTests {
 				.andExpect(jsonPath("$.exception").doesNotExist());
 		mockMvc.perform(get("/api/inventory/lots/1"))
 				.andExpect(status().isUnauthorized());
+		mockMvc.perform(get("/api/inventory/products/search"))
+				.andExpect(status().isUnauthorized());
 		mockMvc.perform(get("/api/production-orders/1"))
+				.andExpect(status().isUnauthorized());
+		mockMvc.perform(get("/api/production-orders/search"))
 				.andExpect(status().isUnauthorized());
 		mockMvc.perform(get("/api/products/search"))
 				.andExpect(status().isUnauthorized());
@@ -300,6 +308,11 @@ class SecurityAuthorizationRulesTests {
 			return ResponseEntity.ok().build();
 		}
 
+		@GetMapping("/api/inventory/products/search")
+		ResponseEntity<Void> searchInventoryProducts() {
+			return ResponseEntity.ok().build();
+		}
+
 		@GetMapping("/api/inventory/products/{productId}/availability")
 		ResponseEntity<Void> getInventoryAvailability(@PathVariable Long productId) {
 			return ResponseEntity.ok().build();
@@ -332,6 +345,11 @@ class SecurityAuthorizationRulesTests {
 
 		@GetMapping("/api/production-orders/{id}")
 		ResponseEntity<Void> getProductionOrder(@PathVariable Long id) {
+			return ResponseEntity.ok().build();
+		}
+
+		@GetMapping("/api/production-orders/search")
+		ResponseEntity<Void> searchProductionOrders() {
 			return ResponseEntity.ok().build();
 		}
 

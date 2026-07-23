@@ -20,15 +20,12 @@ import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableHandlerMethodArgumentResolver;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import com.haru.product.inventory.application.InventorySearchService;
 import com.haru.product.inventory.application.InventoryService;
 import com.haru.product.inventory.application.dto.AdjustInventoryRequest;
 import com.haru.product.inventory.application.dto.ConsumeInventoryRequest;
@@ -37,6 +34,7 @@ import com.haru.product.inventory.application.dto.InventoryAvailabilityResponse;
 import com.haru.product.inventory.application.dto.InventoryConsumptionResponse;
 import com.haru.product.inventory.application.dto.InventoryLotResponse;
 import com.haru.product.inventory.application.dto.InventoryMovementResponse;
+import com.haru.product.inventory.application.dto.InventoryProductSummaryResponse;
 import com.haru.product.inventory.domain.InventoryLotStatus;
 import com.haru.product.inventory.domain.InventoryMovementType;
 import com.haru.product.inventory.domain.exception.DuplicateInventoryLotException;
@@ -45,6 +43,7 @@ import com.haru.product.inventory.domain.exception.InvalidInventoryLotException;
 import com.haru.product.inventory.domain.exception.InventoryLotNotFoundException;
 import com.haru.product.product.domain.MeasurementUnit;
 import com.haru.product.shared.exception.ApiExceptionHandler;
+import com.haru.product.shared.pagination.OffsetPageResponse;
 
 class InventoryControllerTests {
 
@@ -53,15 +52,16 @@ class InventoryControllerTests {
 	private static final String ACTOR = "admin@example.com";
 
 	private InventoryService inventoryService;
+	private InventorySearchService inventorySearchService;
 	private MockMvc mockMvc;
 
 	@BeforeEach
 	void setUp() {
 		inventoryService = mock(InventoryService.class);
+		inventorySearchService = mock(InventorySearchService.class);
 		mockMvc = MockMvcBuilders
-				.standaloneSetup(new InventoryController(inventoryService))
+				.standaloneSetup(new InventoryController(inventoryService, inventorySearchService))
 				.setControllerAdvice(new ApiExceptionHandler())
-				.setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver())
 				.build();
 	}
 
@@ -88,17 +88,22 @@ class InventoryControllerTests {
 		InventoryLotResponse response = lotResponse(
 				1L, "ESS-001", "100.000000", InventoryLotStatus.AVAILABLE);
 		when(inventoryService.getLot(1L)).thenReturn(response);
-		when(inventoryService.getProductLots(eq(7L), any(Pageable.class)))
-				.thenReturn(new PageImpl<>(
-						List.of(response), PageRequest.of(0, 50), 1));
+		when(inventoryService.getProductLots(7L, 15, 20))
+				.thenReturn(new OffsetPageResponse<>(
+						List.of(response), 15, 20, 36, true, true));
 
 		mockMvc.perform(get("/api/inventory/lots/1"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.productId").value(7));
-		mockMvc.perform(get("/api/inventory/products/7/lots"))
+		mockMvc.perform(get("/api/inventory/products/7/lots")
+					.param("offset", "15")
+					.param("limit", "20"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.content[0].lotNumber").value("ESS-001"))
-				.andExpect(jsonPath("$.totalElements").value(1));
+				.andExpect(jsonPath("$.offset").value(15))
+				.andExpect(jsonPath("$.totalElements").value(36))
+				.andExpect(jsonPath("$.hasPrevious").value(true))
+				.andExpect(jsonPath("$.hasNext").value(true));
 	}
 
 	@Test
@@ -110,9 +115,9 @@ class InventoryControllerTests {
 				MeasurementUnit.MILLILITER,
 				new BigDecimal("100.000000"),
 				REFERENCE_DATE));
-		when(inventoryService.getProductMovements(eq(7L), any(Pageable.class)))
-				.thenReturn(new PageImpl<>(
-						List.of(movementResponse()), PageRequest.of(0, 50), 1));
+		when(inventoryService.getProductMovements(7L, 0, 20))
+				.thenReturn(new OffsetPageResponse<>(
+						List.of(movementResponse()), 0, 20, 1, false, false));
 
 		mockMvc.perform(get("/api/inventory/products/7/availability"))
 				.andExpect(status().isOk())
@@ -122,6 +127,40 @@ class InventoryControllerTests {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.content[0].type").value("ENTRY"))
 				.andExpect(jsonPath("$.content[0].createdBy").value(ACTOR));
+	}
+
+	@Test
+	void searchesInventoryProductSummariesWithOffsetMetadata() throws Exception {
+		when(inventorySearchService.search("sakura", 15, 20))
+				.thenReturn(new OffsetPageResponse<>(
+						List.of(new InventoryProductSummaryResponse(
+								7L,
+								"Sakura Essence",
+								"ESS-SAKURA",
+								MeasurementUnit.MILLILITER,
+								true,
+								new BigDecimal("100.000000"),
+								2,
+								REFERENCE_DATE)),
+						15,
+						20,
+						25,
+						true,
+						true));
+
+		mockMvc.perform(get("/api/inventory/products/search")
+					.param("q", "sakura")
+					.param("offset", "15"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.content[0].productId").value(7))
+				.andExpect(jsonPath("$.content[0].availableQuantity").value(100.0))
+				.andExpect(jsonPath("$.content[0].lotCount").value(2))
+				.andExpect(jsonPath("$.offset").value(15))
+				.andExpect(jsonPath("$.limit").value(20))
+				.andExpect(jsonPath("$.hasPrevious").value(true))
+				.andExpect(jsonPath("$.hasNext").value(true));
+
+		verify(inventorySearchService).search("sakura", 15, 20);
 	}
 
 	@Test

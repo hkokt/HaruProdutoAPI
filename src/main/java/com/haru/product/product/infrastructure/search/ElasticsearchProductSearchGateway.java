@@ -20,7 +20,6 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
-import com.haru.product.product.application.dto.ProductSearchPageResponse;
 import com.haru.product.product.application.dto.ProductSearchResultResponse;
 import com.haru.product.product.application.exception.ProductSearchUnavailableException;
 import com.haru.product.product.application.exception.ProductSearchVersionConflictException;
@@ -29,6 +28,7 @@ import com.haru.product.product.application.search.ProductSearchGateway;
 import com.haru.product.product.application.search.ProductSearchIndexEntry;
 import com.haru.product.product.domain.MeasurementUnit;
 import com.haru.product.product.domain.ProductType;
+import com.haru.product.shared.pagination.OffsetPageResponse;
 
 @Component
 public class ElasticsearchProductSearchGateway implements ProductSearchGateway {
@@ -116,29 +116,27 @@ public class ElasticsearchProductSearchGateway implements ProductSearchGateway {
 	}
 
 	@Override
-	public ProductSearchPageResponse search(String query, int page, int size) {
+	public OffsetPageResponse<ProductSearchResultResponse> search(String query, long offset, int limit) {
 		try {
 			ensureIndexExists();
-			int from = Math.multiplyExact(page, size);
-			if (from < 0 || size < 1 || from + size > MAX_RESULT_WINDOW) {
+			int from = Math.toIntExact(offset);
+			if (from < 0 || limit < 1 || from > MAX_RESULT_WINDOW - limit) {
 				throw new IllegalArgumentException("The requested product search page is outside the result window");
 			}
 
 			Map<String, Object> request = new LinkedHashMap<>();
 			request.put("from", from);
-			request.put("size", size);
+			request.put("size", limit);
 			request.put("track_total_hits", true);
 			request.put("query", searchQuery(query));
-			request.put("sort", List.of(
-					Map.of("_score", Map.of("order", "desc")),
-					Map.of("id", Map.of("order", "asc"))));
+			request.put("sort", searchSort(query));
 
 			JsonNode response = restClient.post()
 					.uri(uriBuilder -> uriBuilder.pathSegment(indexName, "_search").build())
 					.body(request)
 					.retrieve()
 					.body(JsonNode.class);
-			return toSearchResponse(response, page, size);
+			return toSearchResponse(response, offset, limit);
 		}
 		catch (ProductSearchUnavailableException exception) {
 			throw exception;
@@ -254,6 +252,12 @@ public class ElasticsearchProductSearchGateway implements ProductSearchGateway {
 	}
 
 	private static Map<String, Object> searchQuery(String query) {
+		if (query.isBlank()) {
+			return Map.of(
+					"bool", Map.of(
+							"filter", List.of(Map.of("term", Map.of("deleted", false)))));
+		}
+
 		List<Map<String, Object>> alternatives = new ArrayList<>();
 		parsePositiveLong(query).ifPresent(id -> alternatives.add(Map.of(
 				"term", Map.of("id", Map.of("value", id, "boost", 20.0)))));
@@ -282,6 +286,15 @@ public class ElasticsearchProductSearchGateway implements ProductSearchGateway {
 						"minimum_should_match", 1));
 	}
 
+	private static List<Map<String, Object>> searchSort(String query) {
+		if (query.isBlank()) {
+			return List.of(Map.of("id", Map.of("order", "desc")));
+		}
+		return List.of(
+				Map.of("_score", Map.of("order", "desc")),
+				Map.of("id", Map.of("order", "asc")));
+	}
+
 	private static Optional<Long> parsePositiveLong(String query) {
 		try {
 			long id = Long.parseLong(query);
@@ -292,7 +305,10 @@ public class ElasticsearchProductSearchGateway implements ProductSearchGateway {
 		}
 	}
 
-	private static ProductSearchPageResponse toSearchResponse(JsonNode response, int page, int size) {
+	private static OffsetPageResponse<ProductSearchResultResponse> toSearchResponse(
+			JsonNode response,
+			long offset,
+			int limit) {
 		if (response == null || !response.path("hits").path("hits").isArray()) {
 			throw new IllegalStateException("Elasticsearch returned an invalid search response");
 		}
@@ -312,14 +328,14 @@ public class ElasticsearchProductSearchGateway implements ProductSearchGateway {
 					hit.path("_score").asDouble()));
 		}
 
-		long totalPageCount = totalElements == 0 ? 0 : ((totalElements - 1) / size) + 1;
-		long accessiblePageCount = MAX_RESULT_WINDOW / size;
-		return new ProductSearchPageResponse(
+		long accessibleTotal = Math.min(totalElements, MAX_RESULT_WINDOW);
+		return new OffsetPageResponse<>(
 				content,
-				page,
-				size,
+				offset,
+				limit,
 				totalElements,
-				(int) Math.min(totalPageCount, accessiblePageCount));
+				offset > 0,
+				offset + content.size() < accessibleTotal);
 	}
 
 	private static Map<Long, Long> parseDocumentVersions(JsonNode response) {

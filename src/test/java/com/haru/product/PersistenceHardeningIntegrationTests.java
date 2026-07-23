@@ -3,7 +3,6 @@ package com.haru.product;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 
@@ -51,6 +50,7 @@ import com.haru.product.inventory.application.dto.InventoryLotResponse;
 import com.haru.product.inventory.infrastructure.persistence.InventoryLotRepository;
 import com.haru.product.product.application.ProductService;
 import com.haru.product.product.application.dto.CreateProductRequest;
+import com.haru.product.product.application.dto.ProductResponse;
 import com.haru.product.product.application.dto.UpdateProductRequest;
 import com.haru.product.product.domain.MeasurementUnit;
 import com.haru.product.product.domain.Product;
@@ -115,6 +115,7 @@ class PersistenceHardeningIntegrationTests {
 				inventory_movements, inventory_lots, product_compositions, products
 				RESTART IDENTITY CASCADE
 				""");
+		jdbcTemplate.execute("ALTER SEQUENCE product_sku_sequence RESTART WITH 1");
 	}
 
 	@Test
@@ -211,35 +212,33 @@ class PersistenceHardeningIntegrationTests {
 	}
 
 	@Test
-	void databaseAllowsOnlyOneOfTwoConcurrentCaseInsensitiveSkuCreations() throws Exception {
-		CyclicBarrier afterPrecheck = new CyclicBarrier(2);
-		AtomicBoolean coordinate = new AtomicBoolean(true);
-		doAnswer(invocation -> {
-			boolean result = Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
-					SELECT EXISTS (
-					    SELECT 1
-					      FROM products
-					     WHERE LOWER(sku) = LOWER(?)
-					)
-					""", Boolean.class, invocation.getArgument(0, String.class)));
-			if (coordinate.get()) {
-				await(afterPrecheck);
-			}
-			return result;
-		}).when(productRepository).existsBySkuIgnoreCase(anyString());
-
+	void databaseGeneratesDistinctSkusForConcurrentProductCreations() throws Exception {
 		List<Attempt> attempts = runConcurrently(
-				() -> productService.create(createProductRequest(
-						"Concurrent product A", "CONCURRENT-SKU")),
-				() -> productService.create(createProductRequest(
-						"Concurrent product B", "concurrent-sku")));
-		coordinate.set(false);
+				() -> productService.create(createProductRequest("Concurrent product A")),
+				() -> productService.create(createProductRequest("Concurrent product B")));
 
-		assertOneConstraintWinner(attempts);
+		assertThat(attempts).allMatch(Attempt::succeeded);
+		assertThat(attempts)
+				.extracting(attempt -> ((ProductResponse) attempt.result()).sku())
+				.containsExactlyInAnyOrder("PRD-0000000001", "PRD-0000000002");
+		assertThat(jdbcTemplate.queryForList(
+				"SELECT sku FROM products ORDER BY sku",
+				String.class))
+				.containsExactly("PRD-0000000001", "PRD-0000000002");
+	}
+
+	@Test
+	void databaseRejectsChangingAnExistingSkuDirectly() {
+		Product product = persistProduct("Immutable SKU product", "PRD-0000000042");
+
+		assertCheckViolation(() -> jdbcTemplate.update(
+				"UPDATE products SET sku = ? WHERE id = ?",
+				"PRD-0000000043",
+				product.getId()));
 		assertThat(jdbcTemplate.queryForObject(
-				"SELECT count(*) FROM products WHERE LOWER(sku) = LOWER(?)",
-				Long.class,
-				"CONCURRENT-SKU")).isOne();
+				"SELECT sku FROM products WHERE id = ?",
+				String.class,
+				product.getId())).isEqualTo("PRD-0000000042");
 	}
 
 	@Test
@@ -370,11 +369,10 @@ class PersistenceHardeningIntegrationTests {
 				new BigDecimal("1.0000"));
 	}
 
-	private static CreateProductRequest createProductRequest(String name, String sku) {
+	private static CreateProductRequest createProductRequest(String name) {
 		return new CreateProductRequest(
 				name,
 				null,
-				sku,
 				ProductType.RAW_MATERIAL,
 				MeasurementUnit.UNIT,
 				true);
@@ -384,7 +382,6 @@ class PersistenceHardeningIntegrationTests {
 		return new UpdateProductRequest(
 				name,
 				null,
-				"VERSIONED-PRODUCT",
 				ProductType.RAW_MATERIAL,
 				MeasurementUnit.UNIT,
 				true);

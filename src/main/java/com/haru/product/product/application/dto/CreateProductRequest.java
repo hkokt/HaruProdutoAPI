@@ -10,7 +10,6 @@ import jakarta.validation.constraints.Size;
 public record CreateProductRequest(
 		@NotBlank @Size(max = 150) String name,
 		@Size(max = 1000) String description,
-		@NotBlank @Size(max = 60) String sku,
 		@NotNull ProductType type,
 		@NotNull MeasurementUnit defaultMeasurementUnit,
 		Boolean active) {

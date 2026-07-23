@@ -157,6 +157,43 @@ class InventoryServiceIntegrationTests {
 	}
 
 	@Test
+	void pagesProductLotsAtAnArbitraryDatabaseOffset() {
+		Product product = persistEssence();
+		createLot(product, "ESS-001", "10", LocalDate.of(2026, 8, 10));
+		InventoryLotResponse second = createLot(
+				product, "ESS-002", "20", LocalDate.of(2026, 8, 20));
+		InventoryLotResponse third = createLot(
+				product, "ESS-003", "30", LocalDate.of(2026, 8, 30));
+
+		var response = inventoryService.getProductLots(product.getId(), 1, 2);
+
+		assertThat(response.content()).extracting(InventoryLotResponse::id)
+				.containsExactly(second.id(), third.id());
+		assertThat(response.offset()).isEqualTo(1);
+		assertThat(response.limit()).isEqualTo(2);
+		assertThat(response.totalElements()).isEqualTo(3);
+		assertThat(response.hasPrevious()).isTrue();
+		assertThat(response.hasNext()).isFalse();
+	}
+
+	@Test
+	void aggregatesAvailableBalancesForAProductPageInOneRepositoryQuery() {
+		Product product = persistEssence();
+		createLot(product, "ESS-AVAILABLE", "100", LocalDate.of(2026, 8, 10));
+		createLot(product, "ESS-EXPIRED", "50", LocalDate.of(2026, 7, 21));
+
+		var summaries = inventoryLotRepository.summarizeByProductIds(
+				List.of(product.getId()),
+				REFERENCE_DATE);
+
+		assertThat(summaries).singleElement().satisfies(summary -> {
+			assertThat(summary.getProductId()).isEqualTo(product.getId());
+			assertThat(summary.getAvailableQuantity()).isEqualByComparingTo("100");
+			assertThat(summary.getLotCount()).isEqualTo(2);
+		});
+	}
+
+	@Test
 	void consumesByFefoAcrossLotsAndLeavesNonExpiringLotUntouched() {
 		Product product = persistEssence();
 		InventoryLotResponse first = createLot(product, "ESS-001", "30", LocalDate.of(2026, 8, 10));

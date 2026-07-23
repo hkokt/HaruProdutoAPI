@@ -148,7 +148,6 @@ class ProductCommandFacadeTests {
 		return new CreateProductRequest(
 				"Sakura Perfume 100 ml",
 				"Finished perfume",
-				"PERF-SAKURA-100ML",
 				ProductType.FINISHED_PRODUCT,
 				MeasurementUnit.UNIT,
 				true);
@@ -158,7 +157,6 @@ class ProductCommandFacadeTests {
 		return new UpdateProductRequest(
 				"Sakura Perfume 100 ml",
 				"Finished perfume",
-				"PERF-SAKURA-100ML",
 				ProductType.FINISHED_PRODUCT,
 				MeasurementUnit.UNIT,
 				true);

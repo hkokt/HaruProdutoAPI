@@ -3,6 +3,7 @@ package com.haru.product.inventory.infrastructure.persistence;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,6 +20,15 @@ import com.haru.product.inventory.domain.InventoryLotStatus;
 
 public interface InventoryLotRepository extends JpaRepository<InventoryLot, Long> {
 
+	interface ProductInventorySummaryProjection {
+
+		Long getProductId();
+
+		BigDecimal getAvailableQuantity();
+
+		long getLotCount();
+	}
+
 	Optional<InventoryLot> findByProductIdAndLotNumber(Long productId, String lotNumber);
 
 	boolean existsByProductIdAndLotNumber(Long productId, String lotNumber);
@@ -27,6 +37,24 @@ public interface InventoryLotRepository extends JpaRepository<InventoryLot, Long
 
 	@EntityGraph(attributePaths = "product")
 	Page<InventoryLot> findAllByProductIdOrderByIdAsc(Long productId, Pageable pageable);
+
+	@Query("""
+			select lot.product.id as productId,
+			       coalesce(sum(case
+			           when lot.availableQuantity > 0
+			            and lot.status = com.haru.product.inventory.domain.InventoryLotStatus.AVAILABLE
+			            and (lot.expirationDate is null or lot.expirationDate >= :referenceDate)
+			           then lot.availableQuantity
+			           else 0
+			       end), 0) as availableQuantity,
+			       count(lot.id) as lotCount
+			  from InventoryLot lot
+			 where lot.product.id in :productIds
+			 group by lot.product.id
+			""")
+	List<ProductInventorySummaryProjection> summarizeByProductIds(
+			@Param("productIds") Collection<Long> productIds,
+			@Param("referenceDate") LocalDate referenceDate);
 
 	@Query("""
 			select lot

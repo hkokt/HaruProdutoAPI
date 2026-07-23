@@ -5,13 +5,29 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.lang.reflect.Method;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
+
+import com.haru.product.production.domain.ProductionOrderStatus;
 
 class ProductionRepositoryFetchPlanTests {
 
 	@Test
 	void fetchesTheOrderProduct() throws NoSuchMethodException {
 		Method method = ProductionOrderRepository.class.getMethod("findById", Long.class);
+
+		assertThat(method.getAnnotation(EntityGraph.class).attributePaths())
+				.containsExactly("product");
+	}
+
+	@Test
+	void fetchesProductsForPaginatedOrderSearch() throws NoSuchMethodException {
+		Method method = ProductionOrderRepository.class.getMethod(
+				"search",
+				String.class,
+				Long.class,
+				ProductionOrderStatus.class,
+				Pageable.class);
 
 		assertThat(method.getAnnotation(EntityGraph.class).attributePaths())
 				.containsExactly("product");

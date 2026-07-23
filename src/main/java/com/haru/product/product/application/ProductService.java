@@ -31,12 +31,12 @@ import com.haru.product.product.domain.Product;
 import com.haru.product.product.domain.ProductComposition;
 import com.haru.product.product.domain.ProductCompositionCycleValidator;
 import com.haru.product.product.domain.exception.DuplicateProductComponentException;
-import com.haru.product.product.domain.exception.DuplicateProductSkuException;
 import com.haru.product.product.domain.exception.InvalidProductCompositionException;
 import com.haru.product.product.domain.exception.ProductCompositionCycleException;
 import com.haru.product.product.domain.exception.ProductNotFoundException;
 import com.haru.product.product.infrastructure.persistence.ProductCompositionRepository;
 import com.haru.product.product.infrastructure.persistence.ProductCompositionTopologyLock;
+import com.haru.product.product.infrastructure.persistence.PostgreSqlProductSkuGenerator;
 import com.haru.product.product.infrastructure.persistence.ProductRepository;
 
 @Service
@@ -56,16 +56,19 @@ public class ProductService {
 	private final ProductCompositionRepository productCompositionRepository;
 	private final ProductCompositionTopologyLock topologyLock;
 	private final ProductCompositionCycleValidator cycleValidator;
+	private final PostgreSqlProductSkuGenerator skuGenerator;
 
 	public ProductService(
 			ProductRepository productRepository,
 			ProductCompositionRepository productCompositionRepository,
 			ProductCompositionTopologyLock topologyLock,
-			ProductCompositionCycleValidator cycleValidator) {
+			ProductCompositionCycleValidator cycleValidator,
+			PostgreSqlProductSkuGenerator skuGenerator) {
 		this.productRepository = productRepository;
 		this.productCompositionRepository = productCompositionRepository;
 		this.topologyLock = topologyLock;
 		this.cycleValidator = cycleValidator;
+		this.skuGenerator = skuGenerator;
 	}
 
 	@Transactional
@@ -73,14 +76,13 @@ public class ProductService {
 		Product product = Product.create(
 				request.name(),
 				request.description(),
-				request.sku(),
+				skuGenerator.nextSku(),
 				request.type(),
 				request.defaultMeasurementUnit());
 		if (Boolean.FALSE.equals(request.active())) {
 			product.deactivate();
 		}
 
-		ensureSkuAvailable(product.getSku(), null);
 		return toResponse(productRepository.saveAndFlush(product), List.of());
 	}
 
@@ -92,11 +94,9 @@ public class ProductService {
 	@Transactional
 	public ProductResponse update(Long id, UpdateProductRequest request) {
 		Product product = requireProduct(id);
-		ensureSkuAvailable(Product.normalizeSku(request.sku()), product.getId());
 		product.update(
 				request.name(),
 				request.description(),
-				request.sku(),
 				request.type(),
 				request.defaultMeasurementUnit(),
 				Boolean.TRUE.equals(request.active()));
@@ -166,15 +166,6 @@ public class ProductService {
 	private Product requireProduct(Long id) {
 		return productRepository.findById(id)
 				.orElseThrow(() -> new ProductNotFoundException(id));
-	}
-
-	private void ensureSkuAvailable(String sku, Long currentProductId) {
-		boolean duplicate = currentProductId == null
-				? productRepository.existsBySkuIgnoreCase(sku)
-				: productRepository.existsBySkuIgnoreCaseAndIdNot(sku, currentProductId);
-		if (duplicate) {
-			throw new DuplicateProductSkuException(sku);
-		}
 	}
 
 	private List<ProductComposition> findDirectCompositions(Long productId) {

@@ -8,7 +8,6 @@ import java.util.Collection;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
-import org.springframework.data.jpa.repository.Query;
 
 class ProductRepositoryFetchPlanTests {
 
@@ -33,19 +32,4 @@ class ProductRepositoryFetchPlanTests {
 				.containsExactly("parentProduct", "componentProduct");
 	}
 
-	@Test
-	void alignsSkuPrechecksWithTheLowercaseDatabaseIndex() throws NoSuchMethodException {
-		Method createCheck = ProductRepository.class.getMethod(
-				"existsBySkuIgnoreCase",
-				String.class);
-		Method updateCheck = ProductRepository.class.getMethod(
-				"existsBySkuIgnoreCaseAndIdNot",
-				String.class,
-				Long.class);
-
-		assertThat(createCheck.getAnnotation(Query.class).value())
-				.contains("lower(product.sku) = lower(:sku)");
-		assertThat(updateCheck.getAnnotation(Query.class).value())
-				.contains("lower(product.sku) = lower(:sku)");
-	}
 }

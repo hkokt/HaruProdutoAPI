@@ -169,6 +169,37 @@ class ProductionServiceIntegrationTests {
 	}
 
 	@Test
+	void searchesAndFiltersOrdersAtAnArbitraryDatabaseOffset() {
+		Catalog catalog = createSakuraCatalog();
+		ProductionOrderResponse first = productionService.create(
+				new CreateProductionOrderRequest(catalog.finishedProduct().getId(), BigDecimal.ONE));
+		ProductionOrderResponse second = productionService.create(
+				new CreateProductionOrderRequest(catalog.finishedProduct().getId(), BigDecimal.TEN));
+		ProductionOrderResponse third = productionService.create(
+				new CreateProductionOrderRequest(catalog.finishedProduct().getId(), new BigDecimal("20")));
+
+		var response = productionService.search(
+				"sakura",
+				ProductionOrderStatus.CREATED,
+				1,
+				2);
+
+		assertThat(response.content()).extracting(ProductionOrderResponse::id)
+				.containsExactly(second.id(), first.id());
+		assertThat(response.content()).extracting(ProductionOrderResponse::status)
+				.containsOnly(ProductionOrderStatus.CREATED);
+		assertThat(response.offset()).isEqualTo(1);
+		assertThat(response.limit()).isEqualTo(2);
+		assertThat(response.totalElements()).isEqualTo(3);
+		assertThat(response.hasPrevious()).isTrue();
+		assertThat(response.hasNext()).isFalse();
+
+		var exactId = productionService.search(String.valueOf(third.id()), null, 0, 20);
+		assertThat(exactId.content()).extracting(ProductionOrderResponse::id)
+				.containsExactly(third.id());
+	}
+
+	@Test
 	void multipliesTheUnitBomExactlyForTenProducedUnits() {
 		Catalog catalog = createSakuraCatalog();
 		StandardStock stock = createStandardStock(catalog, "600", "500", "200");

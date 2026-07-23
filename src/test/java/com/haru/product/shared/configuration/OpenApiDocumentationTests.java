@@ -11,6 +11,7 @@ import com.haru.product.inventory.infrastructure.persistence.InventoryLotReposit
 import com.haru.product.inventory.infrastructure.persistence.InventoryMovementRepository;
 import com.haru.product.product.infrastructure.persistence.ProductCompositionRepository;
 import com.haru.product.product.infrastructure.persistence.ProductCompositionTopologyLock;
+import com.haru.product.product.infrastructure.persistence.PostgreSqlProductSkuGenerator;
 import com.haru.product.product.infrastructure.persistence.ProductRepository;
 import com.haru.product.production.infrastructure.persistence.ProducedLotRepository;
 import com.haru.product.production.infrastructure.persistence.ProductionConsumptionRepository;
@@ -46,6 +47,9 @@ class OpenApiDocumentationTests {
 	private ProductCompositionTopologyLock productCompositionTopologyLock;
 
 	@MockitoBean
+	private PostgreSqlProductSkuGenerator productSkuGenerator;
+
+	@MockitoBean
 	private InventoryLotRepository inventoryLotRepository;
 
 	@MockitoBean
@@ -71,10 +75,21 @@ class OpenApiDocumentationTests {
 				.andExpect(jsonPath("$.components.securitySchemes.bearerAuth.type").value("http"))
 				.andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
 				.andExpect(jsonPath("$.security[0].bearerAuth").isArray())
+				.andExpect(jsonPath("$.components.schemas.CreateProductRequest.properties.sku")
+						.doesNotExist())
+				.andExpect(jsonPath("$.components.schemas.UpdateProductRequest.properties.sku")
+						.doesNotExist())
+				.andExpect(jsonPath("$.components.schemas.ProductResponse.properties.sku").exists())
 				.andExpect(jsonPath("$['paths']['/api/products/search']").exists())
+				.andExpect(jsonPath("$['paths']['/api/products/search']['get']['parameters'][?(@.name == 'offset')]")
+						.isNotEmpty())
+				.andExpect(jsonPath("$['paths']['/api/products/search']['get']['parameters'][?(@.name == 'limit')]")
+						.isNotEmpty())
 				.andExpect(jsonPath("$['paths']['/api/products/{id}']").exists())
 				.andExpect(jsonPath("$['paths']['/api/inventory/lots/{id}']").exists())
+				.andExpect(jsonPath("$['paths']['/api/inventory/products/search']['get']").exists())
 				.andExpect(jsonPath("$['paths']['/api/production-orders/{id}']").exists())
+				.andExpect(jsonPath("$['paths']['/api/production-orders/search']['get']").exists())
 				.andExpect(jsonPath("$['paths']['/admin/status']").doesNotExist())
 				.andExpect(jsonPath("$['paths']['/admin/search/products/reindex']").doesNotExist());
 

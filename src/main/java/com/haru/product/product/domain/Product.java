@@ -45,7 +45,7 @@ public class Product {
 	@Column(length = MAX_DESCRIPTION_LENGTH)
 	private String description;
 
-	@Column(nullable = false, length = MAX_SKU_LENGTH)
+	@Column(nullable = false, length = MAX_SKU_LENGTH, updatable = false)
 	private String sku;
 
 	@Enumerated(EnumType.STRING)
@@ -106,7 +106,6 @@ public class Product {
 	public void update(
 			String name,
 			String description,
-			String sku,
 			ProductType type,
 			MeasurementUnit defaultMeasurementUnit,
 			boolean active) {
@@ -116,7 +115,6 @@ public class Product {
 		}
 		this.name = requiredText(name, "Product name", MAX_NAME_LENGTH);
 		this.description = optionalText(description, "Product description", MAX_DESCRIPTION_LENGTH);
-		this.sku = normalizeSku(sku);
 		this.type = validatedType;
 		this.defaultMeasurementUnit = Objects.requireNonNull(
 				defaultMeasurementUnit,

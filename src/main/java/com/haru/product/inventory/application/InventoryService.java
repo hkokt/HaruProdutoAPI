@@ -8,9 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +33,8 @@ import com.haru.product.inventory.infrastructure.persistence.InventoryMovementRe
 import com.haru.product.product.domain.Product;
 import com.haru.product.product.domain.exception.ProductNotFoundException;
 import com.haru.product.product.infrastructure.persistence.ProductRepository;
+import com.haru.product.shared.pagination.OffsetLimitPageable;
+import com.haru.product.shared.pagination.OffsetPageResponse;
 
 @Service
 @Transactional(readOnly = true)
@@ -47,8 +47,6 @@ public class InventoryService {
 			LOT_REFERENCE,
 			ADJUSTMENT_REFERENCE,
 			"PRODUCTION_ORDER");
-	private static final int DEFAULT_PAGE_SIZE = 50;
-	private static final int MAX_PAGE_SIZE = 200;
 	private static final int FEFO_BATCH_SIZE = 100;
 
 	private final InventoryLotRepository inventoryLotRepository;
@@ -103,12 +101,18 @@ public class InventoryService {
 		return toLotResponse(requireLot(id), referenceDate());
 	}
 
-	public Page<InventoryLotResponse> getProductLots(Long productId, Pageable pageable) {
+	public OffsetPageResponse<InventoryLotResponse> getProductLots(
+			Long productId,
+			long offset,
+			int limit) {
 		requireProduct(productId);
 		LocalDate referenceDate = referenceDate();
-		return inventoryLotRepository
-				.findAllByProductIdOrderByIdAsc(productId, bounded(pageable))
+		var page = inventoryLotRepository
+				.findAllByProductIdOrderByIdAsc(
+						productId,
+						OffsetLimitPageable.of(offset, limit))
 				.map(lot -> toLotResponse(lot, referenceDate));
+		return OffsetPageResponse.from(page, offset, limit);
 	}
 
 	public InventoryAvailabilityResponse getAvailability(Long productId) {
@@ -124,15 +128,17 @@ public class InventoryService {
 				referenceDate);
 	}
 
-	public Page<InventoryMovementResponse> getProductMovements(
+	public OffsetPageResponse<InventoryMovementResponse> getProductMovements(
 			Long productId,
-			Pageable pageable) {
+			long offset,
+			int limit) {
 		requireProduct(productId);
-		return inventoryMovementRepository
+		var page = inventoryMovementRepository
 				.findAllByInventoryLotProductIdOrderByOccurredAtDescIdDesc(
 						productId,
-						bounded(pageable))
+						OffsetLimitPageable.of(offset, limit))
 				.map(InventoryService::toMovementResponse);
+		return OffsetPageResponse.from(page, offset, limit);
 	}
 
 	@Transactional
@@ -428,15 +434,6 @@ public class InventoryService {
 				productId,
 				requestedQuantity,
 				latestAvailable == null ? BigDecimal.ZERO : latestAvailable);
-	}
-
-	private static Pageable bounded(Pageable pageable) {
-		if (pageable == null || pageable.isUnpaged()) {
-			return PageRequest.of(0, DEFAULT_PAGE_SIZE);
-		}
-		return PageRequest.of(
-				pageable.getPageNumber(),
-				Math.min(pageable.getPageSize(), MAX_PAGE_SIZE));
 	}
 
 	private static ObjectOptimisticLockingFailureException optimisticConflict(

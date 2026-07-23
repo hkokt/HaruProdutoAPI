@@ -2,9 +2,10 @@ package com.haru.product.product.application;
 
 import org.springframework.stereotype.Service;
 
-import com.haru.product.product.application.dto.ProductSearchPageResponse;
+import com.haru.product.product.application.dto.ProductSearchResultResponse;
 import com.haru.product.product.application.exception.InvalidProductSearchRequestException;
 import com.haru.product.product.application.search.ProductSearchGateway;
+import com.haru.product.shared.pagination.OffsetPageResponse;
 
 @Service
 public class ProductSearchService {
@@ -15,16 +16,15 @@ public class ProductSearchService {
 		this.productSearchGateway = productSearchGateway;
 	}
 
-	public ProductSearchPageResponse search(String query, int page, int size) {
+	public OffsetPageResponse<ProductSearchResultResponse> search(String query, long offset, int limit) {
 		String normalizedQuery = query == null ? "" : query.strip();
-		if (normalizedQuery.isEmpty()
-				|| normalizedQuery.length() > 150
-				|| page < 0
-				|| size < 1
-				|| size > 50
-				|| ((long) page * size) + size > 10_000) {
+		if (normalizedQuery.length() > 150
+				|| offset < 0
+				|| limit < 1
+				|| limit > 50
+				|| offset > 10_000 - limit) {
 			throw new InvalidProductSearchRequestException();
 		}
-		return productSearchGateway.search(normalizedQuery, page, size);
+		return productSearchGateway.search(normalizedQuery, offset, limit);
 	}
 }

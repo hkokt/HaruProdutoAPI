@@ -22,6 +22,7 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -50,6 +51,7 @@ import com.haru.product.production.domain.exception.ProductWithoutBomException;
 import com.haru.product.production.infrastructure.persistence.ProducedLotRepository;
 import com.haru.product.production.infrastructure.persistence.ProductionConsumptionRepository;
 import com.haru.product.production.infrastructure.persistence.ProductionOrderRepository;
+import com.haru.product.shared.pagination.OffsetLimitPageable;
 
 class ProductionServiceTests {
 
@@ -89,6 +91,40 @@ class ProductionServiceTests {
 			inventoryLotRepository,
 			inventoryMovementRepository,
 			Clock.fixed(FIXED_INSTANT, ZoneOffset.UTC));
+
+	@Test
+	void searchesOrdersWithAnArbitraryOffsetWithoutLoadingTraceDetails() {
+		ProductionOrder order = ProductionOrder.create(
+				finishedProduct(),
+				BigDecimal.TEN,
+				FIXED_INSTANT);
+		ReflectionTestUtils.setField(order, "id", ORDER_ID);
+		OffsetLimitPageable pageable = OffsetLimitPageable.of(15, 20);
+		when(productionOrderRepository.search(
+				"100",
+				ORDER_ID,
+				ProductionOrderStatus.CREATED,
+				pageable))
+				.thenReturn(new PageImpl<>(List.of(order), pageable, 36));
+
+		var response = service.search(" 100 ", ProductionOrderStatus.CREATED, 15, 20);
+
+		assertThat(response.offset()).isEqualTo(15);
+		assertThat(response.limit()).isEqualTo(20);
+		assertThat(response.totalElements()).isEqualTo(36);
+		assertThat(response.hasPrevious()).isTrue();
+		assertThat(response.hasNext()).isTrue();
+		assertThat(response.content()).singleElement().satisfies(result -> {
+			assertThat(result.id()).isEqualTo(ORDER_ID);
+			assertThat(result.productName()).isEqualTo("Sakura Perfume 100 ml");
+		});
+		verify(productionOrderRepository).search(
+				"100",
+				ORDER_ID,
+				ProductionOrderStatus.CREATED,
+				pageable);
+		verifyNoInteractions(productionConsumptionRepository, producedLotRepository);
+	}
 
 	@Test
 	void requiresBomWhenCreatingProductionOrder() {

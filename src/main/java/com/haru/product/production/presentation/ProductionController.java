@@ -5,11 +5,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.security.Principal;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -18,10 +20,17 @@ import com.haru.product.production.application.dto.CompleteProductionRequest;
 import com.haru.product.production.application.dto.CreateProductionOrderRequest;
 import com.haru.product.production.application.dto.ProductionOrderResponse;
 import com.haru.product.production.application.dto.ProductionResultResponse;
+import com.haru.product.production.domain.ProductionOrderStatus;
+import com.haru.product.shared.pagination.OffsetPageResponse;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 
 @Tag(name = "Production Orders", description = "Production-order lifecycle and traceability")
+@Validated
 @RestController
 @RequestMapping("/api/production-orders")
 public class ProductionController {
@@ -37,6 +46,15 @@ public class ProductionController {
 	public ProductionOrderResponse create(
 			@Valid @RequestBody CreateProductionOrderRequest request) {
 		return productionService.create(request);
+	}
+
+	@GetMapping("/search")
+	public OffsetPageResponse<ProductionOrderResponse> search(
+			@RequestParam(defaultValue = "") @Size(max = 150) String q,
+			@RequestParam(required = false) ProductionOrderStatus status,
+			@RequestParam(defaultValue = "0") @PositiveOrZero @Max(2_147_483_647L) long offset,
+			@RequestParam(defaultValue = "20") @Min(1) @Max(50) int limit) {
+		return productionService.search(q, status, offset, limit);
 	}
 
 	@GetMapping("/{id}")

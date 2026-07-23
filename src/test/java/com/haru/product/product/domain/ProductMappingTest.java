@@ -6,6 +6,7 @@ import java.lang.reflect.Field;
 
 import org.junit.jupiter.api.Test;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
@@ -31,6 +32,13 @@ class ProductMappingTest {
 
 		assertThat(version.getType()).isEqualTo(long.class);
 		assertThat(version.isAnnotationPresent(Version.class)).isTrue();
+	}
+
+	@Test
+	void mapsSkuAsImmutableAfterInsertion() throws NoSuchFieldException {
+		Column skuColumn = Product.class.getDeclaredField("sku").getAnnotation(Column.class);
+
+		assertThat(skuColumn.updatable()).isFalse();
 	}
 
 	@Test

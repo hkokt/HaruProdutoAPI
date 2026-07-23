@@ -43,6 +43,8 @@ import com.haru.product.production.domain.exception.ProductionOrderNotFoundExcep
 import com.haru.product.production.infrastructure.persistence.ProducedLotRepository;
 import com.haru.product.production.infrastructure.persistence.ProductionConsumptionRepository;
 import com.haru.product.production.infrastructure.persistence.ProductionOrderRepository;
+import com.haru.product.shared.pagination.OffsetLimitPageable;
+import com.haru.product.shared.pagination.OffsetPageResponse;
 
 @Service
 @Transactional(readOnly = true)
@@ -96,6 +98,22 @@ public class ProductionService {
 
 	public ProductionResultResponse getById(Long id) {
 		return toResultResponse(requireOrder(id));
+	}
+
+	public OffsetPageResponse<ProductionOrderResponse> search(
+			String query,
+			ProductionOrderStatus status,
+			long offset,
+			int limit) {
+		String normalizedQuery = query == null ? "" : query.strip();
+		Long numericQuery = parsePositiveLong(normalizedQuery);
+		var page = productionOrderRepository.search(
+				normalizedQuery,
+				numericQuery,
+				status,
+				OffsetLimitPageable.of(offset, limit))
+				.map(ProductionService::toOrderResponse);
+		return OffsetPageResponse.from(page, offset, limit);
 	}
 
 	@Transactional
@@ -334,6 +352,15 @@ public class ProductionService {
 					"Produced lot unit cost must fit NUMERIC(19, 4)");
 		}
 		return lotNumber;
+	}
+
+	private static Long parsePositiveLong(String value) {
+		try {
+			long parsed = Long.parseLong(value);
+			return parsed > 0 ? parsed : null;
+		} catch (NumberFormatException exception) {
+			return null;
+		}
 	}
 
 	private static BigDecimal multiplyBomQuantity(

@@ -26,18 +26,17 @@ import com.haru.product.product.application.dto.CreateProductRequest;
 import com.haru.product.product.application.dto.ProductCompositionResponse;
 import com.haru.product.product.application.dto.ProductCompositionTreeResponse;
 import com.haru.product.product.application.dto.ProductResponse;
-import com.haru.product.product.application.dto.ProductSearchPageResponse;
 import com.haru.product.product.application.dto.ProductSearchResultResponse;
 import com.haru.product.product.application.dto.UpdateProductComponentRequest;
 import com.haru.product.product.application.dto.UpdateProductRequest;
 import com.haru.product.product.domain.MeasurementUnit;
 import com.haru.product.product.domain.Product;
 import com.haru.product.product.domain.ProductType;
-import com.haru.product.product.domain.exception.DuplicateProductSkuException;
 import com.haru.product.product.domain.exception.ProductNotFoundException;
 import com.haru.product.product.application.exception.ProductSearchUnavailableException;
 import com.haru.product.product.application.exception.InvalidProductSearchRequestException;
 import com.haru.product.shared.exception.ApiExceptionHandler;
+import com.haru.product.shared.pagination.OffsetPageResponse;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -86,8 +85,8 @@ class ProductControllerTests {
 
 	@Test
 	void searchesProductsByNameIdOrSku() throws Exception {
-		when(productSearchService.search("sakura", 0, 20))
-				.thenReturn(new ProductSearchPageResponse(
+		when(productSearchService.search("sakura", 15, 20))
+				.thenReturn(new OffsetPageResponse<>(
 						List.of(new ProductSearchResultResponse(
 								1L,
 								"Sakura Perfume 100 ml",
@@ -96,23 +95,27 @@ class ProductControllerTests {
 								MeasurementUnit.UNIT,
 								true,
 								12.5)),
-						0,
+						15,
 						20,
-						1,
-						1));
+						36,
+						true,
+						true));
 
-		mockMvc.perform(get("/api/products/search").param("q", "sakura"))
+		mockMvc.perform(get("/api/products/search")
+					.param("q", "sakura")
+					.param("offset", "15"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.content[0].id").value(1))
 				.andExpect(jsonPath("$.content[0].name").value("Sakura Perfume 100 ml"))
 				.andExpect(jsonPath("$.content[0].sku").value("PERF-SAKURA-100ML"))
 				.andExpect(jsonPath("$.content[0].score").value(12.5))
-				.andExpect(jsonPath("$.page").value(0))
-				.andExpect(jsonPath("$.size").value(20))
-				.andExpect(jsonPath("$.totalElements").value(1))
-				.andExpect(jsonPath("$.totalPages").value(1));
+				.andExpect(jsonPath("$.offset").value(15))
+				.andExpect(jsonPath("$.limit").value(20))
+				.andExpect(jsonPath("$.totalElements").value(36))
+				.andExpect(jsonPath("$.hasPrevious").value(true))
+				.andExpect(jsonPath("$.hasNext").value(true));
 
-		verify(productSearchService).search("sakura", 0, 20);
+		verify(productSearchService).search("sakura", 15, 20);
 	}
 
 	@Test
@@ -135,7 +138,7 @@ class ProductControllerTests {
 
 		mockMvc.perform(get("/api/products/search")
 					.param("q", " ")
-					.param("size", "0"))
+					.param("limit", "0"))
 				.andExpect(status().isBadRequest())
 				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
 				.andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
@@ -257,19 +260,6 @@ class ProductControllerTests {
 	}
 
 	@Test
-	void returnsConflictForDuplicateSku() throws Exception {
-		when(productCommandFacade.create(any(CreateProductRequest.class)))
-				.thenThrow(new DuplicateProductSkuException("PERF-SAKURA-100ML"));
-
-		mockMvc.perform(post("/api/products")
-					.contentType(MediaType.APPLICATION_JSON)
-					.content(createProductJson()))
-				.andExpect(status().isConflict())
-				.andExpect(jsonPath("$.code").value("DUPLICATE_RESOURCE"))
-				.andExpect(jsonPath("$.trace").doesNotExist());
-	}
-
-	@Test
 	void returnsAGenericConflictForAnUnclassifiedDatabaseConstraint() throws Exception {
 		when(productCommandFacade.create(any(CreateProductRequest.class)))
 				.thenThrow(new DataIntegrityViolationException("constraint violation"));
@@ -345,7 +335,6 @@ class ProductControllerTests {
 				{
 				  "name": "Sakura Perfume 100 ml",
 				  "description": "Finished perfume",
-				  "sku": "PERF-SAKURA-100ML",
 				  "type": "FINISHED_PRODUCT",
 				  "defaultMeasurementUnit": "UNIT",
 				  "active": true

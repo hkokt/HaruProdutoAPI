@@ -8,6 +8,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -24,16 +25,17 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.haru.product.product.application.dto.AddProductComponentRequest;
 import com.haru.product.product.application.dto.CreateProductRequest;
 import com.haru.product.product.application.dto.ProductCompositionTreeResponse;
+import com.haru.product.product.application.dto.UpdateProductRequest;
 import com.haru.product.product.domain.MeasurementUnit;
 import com.haru.product.product.domain.Product;
 import com.haru.product.product.domain.ProductComposition;
 import com.haru.product.product.domain.ProductCompositionCycleValidator;
 import com.haru.product.product.domain.ProductType;
 import com.haru.product.product.domain.exception.DuplicateProductComponentException;
-import com.haru.product.product.domain.exception.DuplicateProductSkuException;
 import com.haru.product.product.domain.exception.InvalidProductCompositionException;
 import com.haru.product.product.infrastructure.persistence.ProductCompositionRepository;
 import com.haru.product.product.infrastructure.persistence.ProductCompositionTopologyLock;
+import com.haru.product.product.infrastructure.persistence.PostgreSqlProductSkuGenerator;
 import com.haru.product.product.infrastructure.persistence.ProductRepository;
 
 class ProductServiceTests {
@@ -43,43 +45,55 @@ class ProductServiceTests {
 			mock(ProductCompositionRepository.class);
 	private final ProductCompositionTopologyLock topologyLock =
 			mock(ProductCompositionTopologyLock.class);
+	private final PostgreSqlProductSkuGenerator skuGenerator =
+			mock(PostgreSqlProductSkuGenerator.class);
 	private final ProductService service = new ProductService(
 			productRepository,
 			compositionRepository,
 			topologyLock,
-			new ProductCompositionCycleValidator());
+			new ProductCompositionCycleValidator(),
+			skuGenerator);
 
 	@Test
-	void createsAnActiveProductWithANormalizedUserProvidedSku() {
+	void createsAnActiveProductWithAnAutomaticallyGeneratedSku() {
+		when(skuGenerator.nextSku()).thenReturn("PRD-0000000001");
 		when(productRepository.saveAndFlush(any(Product.class)))
 				.thenAnswer(invocation -> invocation.getArgument(0));
 
 		var response = service.create(new CreateProductRequest(
 				"Sakura Essence",
 				null,
-				"  ESS-SAKURA  ",
 				ProductType.RAW_MATERIAL,
 				MeasurementUnit.MILLILITER,
 				null));
 
-		assertThat(response.sku()).isEqualTo("ESS-SAKURA");
+		assertThat(response.sku()).isEqualTo("PRD-0000000001");
 		assertThat(response.active()).isTrue();
-		verify(productRepository).existsBySkuIgnoreCase("ESS-SAKURA");
+		verify(skuGenerator).nextSku();
 	}
 
 	@Test
-	void rejectsADuplicateSkuIgnoringCase() {
-		when(productRepository.existsBySkuIgnoreCase("ess-sakura")).thenReturn(true);
+	void preservesTheSkuWhenUpdatingAProduct() {
+		Product product = product(
+				1L,
+				"Sakura Essence",
+				"PRD-0000000042",
+				ProductType.RAW_MATERIAL);
+		when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+		when(productRepository.saveAndFlush(product)).thenReturn(product);
 
-		assertThatExceptionOfType(DuplicateProductSkuException.class)
-				.isThrownBy(() -> service.create(new CreateProductRequest(
-						"Sakura Essence",
+		var response = service.update(
+				1L,
+				new UpdateProductRequest(
+						"Updated Sakura Essence",
 						null,
-						"ess-sakura",
 						ProductType.RAW_MATERIAL,
 						MeasurementUnit.MILLILITER,
-						null)));
-		verify(productRepository, never()).saveAndFlush(any(Product.class));
+						true));
+
+		assertThat(response.sku()).isEqualTo("PRD-0000000042");
+		assertThat(response.name()).isEqualTo("Updated Sakura Essence");
+		verifyNoInteractions(skuGenerator);
 	}
 
 	@Test

@@ -4,7 +4,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-import com.haru.product.product.application.dto.ProductSearchPageResponse;
+import com.haru.product.product.application.dto.ProductSearchResultResponse;
+import com.haru.product.shared.pagination.OffsetPageResponse;
 
 public interface ProductSearchGateway {
 
@@ -14,7 +15,7 @@ public interface ProductSearchGateway {
 
 	void refresh();
 
-	ProductSearchPageResponse search(String query, int page, int size);
+	OffsetPageResponse<ProductSearchResultResponse> search(String query, long offset, int limit);
 
 	Map<Long, Long> findDatabaseVersions(Collection<Long> productIds);
 

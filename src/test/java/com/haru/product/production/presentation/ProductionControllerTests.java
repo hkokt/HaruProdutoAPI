@@ -38,6 +38,7 @@ import com.haru.product.production.domain.exception.InvalidProductionOrderStateE
 import com.haru.product.production.domain.exception.ProductWithoutBomException;
 import com.haru.product.production.domain.exception.ProductionOrderNotFoundException;
 import com.haru.product.shared.exception.ApiExceptionHandler;
+import com.haru.product.shared.pagination.OffsetPageResponse;
 
 class ProductionControllerTests {
 
@@ -79,6 +80,33 @@ class ProductionControllerTests {
 				.andExpect(jsonPath("$.status").value("CREATED"));
 
 		verify(productionService).create(new CreateProductionOrderRequest(7L, BigDecimal.TEN));
+	}
+
+	@Test
+	void searchesProductionOrdersByQueryStatusAndOffset() throws Exception {
+		when(productionService.search("sakura", ProductionOrderStatus.IN_PROGRESS, 15, 20))
+				.thenReturn(new OffsetPageResponse<>(
+						List.of(order(ProductionOrderStatus.IN_PROGRESS)),
+						15,
+						20,
+						36,
+						true,
+						true));
+
+		mockMvc.perform(get("/api/production-orders/search")
+					.param("q", "sakura")
+					.param("status", "IN_PROGRESS")
+					.param("offset", "15"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.content[0].id").value(21))
+				.andExpect(jsonPath("$.content[0].status").value("IN_PROGRESS"))
+				.andExpect(jsonPath("$.offset").value(15))
+				.andExpect(jsonPath("$.limit").value(20))
+				.andExpect(jsonPath("$.totalElements").value(36))
+				.andExpect(jsonPath("$.hasPrevious").value(true))
+				.andExpect(jsonPath("$.hasNext").value(true));
+
+		verify(productionService).search("sakura", ProductionOrderStatus.IN_PROGRESS, 15, 20);
 	}
 
 	@Test

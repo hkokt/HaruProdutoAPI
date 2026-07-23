@@ -169,14 +169,13 @@ class ProductTest {
 				.isThrownBy(() -> perfume.update(
 						"Perfume Sakura",
 						null,
-						"PERF-SAKURA",
 						ProductType.SERVICE,
 						MeasurementUnit.UNIT,
 						true));
 	}
 
 	@Test
-	void normalizesUnnecessarySkuWhitespaceWithoutGeneratingIt() {
+	void normalizesSkuAtTheDomainBoundary() {
 		Product product = finishedProduct("Perfume Sakura", "  PERF   SAKURA-100ML  ");
 		Product productWithLongRawWhitespace = finishedProduct(
 				"Whitespace SKU",
@@ -188,6 +187,22 @@ class ProductTest {
 				.isThrownBy(() -> finishedProduct("Missing SKU", "   "));
 		assertThatExceptionOfType(IllegalArgumentException.class)
 				.isThrownBy(() -> finishedProduct("Long SKU", "S".repeat(61)));
+	}
+
+	@Test
+	void preservesSkuWhenUpdatingProductDetails() {
+		Product product = finishedProduct("Perfume Sakura", "PRD-0000000042");
+
+		product.update(
+				"Updated Perfume Sakura",
+				null,
+				ProductType.FINISHED_PRODUCT,
+				MeasurementUnit.UNIT,
+				false);
+
+		assertThat(product.getSku()).isEqualTo("PRD-0000000042");
+		assertThat(product.getName()).isEqualTo("Updated Perfume Sakura");
+		assertThat(product.isActive()).isFalse();
 	}
 
 	@Test

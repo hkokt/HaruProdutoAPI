@@ -38,6 +38,7 @@ import com.haru.product.product.domain.MeasurementUnit;
 import com.haru.product.product.domain.Product;
 import com.haru.product.product.domain.ProductType;
 import com.haru.product.product.infrastructure.persistence.ProductRepository;
+import com.haru.product.shared.pagination.OffsetLimitPageable;
 
 class InventoryServiceTests {
 
@@ -192,24 +193,28 @@ class InventoryServiceTests {
 	}
 
 	@Test
-	void capsInventoryLotPagesAndMapsEntitiesInsideTheTransaction() {
+	void appliesAnArbitraryInventoryLotOffsetAndMapsEntitiesInsideTheTransaction() {
 		Product product = product();
 		InventoryLot inventoryLot = lot(product, LOT_ID, "100");
-		PageRequest boundedPage = PageRequest.of(2, 200);
+		OffsetLimitPageable pageable = OffsetLimitPageable.of(15, 20);
 		when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(product));
 		when(inventoryLotRepository.findAllByProductIdOrderByIdAsc(
 				PRODUCT_ID,
-				boundedPage))
-				.thenReturn(new PageImpl<>(List.of(inventoryLot), boundedPage, 401));
+				pageable))
+				.thenReturn(new PageImpl<>(List.of(inventoryLot), pageable, 36));
 
-		var response = service.getProductLots(PRODUCT_ID, PageRequest.of(2, 500));
+		var response = service.getProductLots(PRODUCT_ID, 15, 20);
 
-		assertThat(response.getSize()).isEqualTo(200);
-		assertThat(response.getContent())
+		assertThat(response.offset()).isEqualTo(15);
+		assertThat(response.limit()).isEqualTo(20);
+		assertThat(response.totalElements()).isEqualTo(36);
+		assertThat(response.hasPrevious()).isTrue();
+		assertThat(response.hasNext()).isTrue();
+		assertThat(response.content())
 				.singleElement()
 				.satisfies(lot -> assertThat(lot.id()).isEqualTo(LOT_ID));
 		verify(inventoryLotRepository)
-				.findAllByProductIdOrderByIdAsc(PRODUCT_ID, boundedPage);
+				.findAllByProductIdOrderByIdAsc(PRODUCT_ID, pageable);
 	}
 
 	@Test

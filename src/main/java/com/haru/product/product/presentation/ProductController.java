@@ -10,14 +10,14 @@ import com.haru.product.product.application.dto.CreateProductRequest;
 import com.haru.product.product.application.dto.ProductCompositionResponse;
 import com.haru.product.product.application.dto.ProductCompositionTreeResponse;
 import com.haru.product.product.application.dto.ProductResponse;
-import com.haru.product.product.application.dto.ProductSearchPageResponse;
+import com.haru.product.product.application.dto.ProductSearchResultResponse;
 import com.haru.product.product.application.dto.UpdateProductComponentRequest;
 import com.haru.product.product.application.dto.UpdateProductRequest;
+import com.haru.product.shared.pagination.OffsetPageResponse;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
@@ -60,11 +60,11 @@ public class ProductController {
 	}
 
 	@GetMapping("/search")
-	public ProductSearchPageResponse search(
-			@RequestParam @NotBlank @Size(max = 150) String q,
-			@RequestParam(defaultValue = "0") @PositiveOrZero int page,
-			@RequestParam(defaultValue = "20") @Min(1) @Max(50) int size) {
-		return productSearchService.search(q, page, size);
+	public OffsetPageResponse<ProductSearchResultResponse> search(
+			@RequestParam(defaultValue = "") @Size(max = 150) String q,
+			@RequestParam(defaultValue = "0") @PositiveOrZero long offset,
+			@RequestParam(defaultValue = "20") @Min(1) @Max(50) int limit) {
+		return productSearchService.search(q, offset, limit);
 	}
 
 	@GetMapping("/{id}")

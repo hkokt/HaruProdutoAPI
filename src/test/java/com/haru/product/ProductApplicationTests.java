@@ -8,6 +8,7 @@ import com.haru.product.inventory.infrastructure.persistence.InventoryLotReposit
 import com.haru.product.inventory.infrastructure.persistence.InventoryMovementRepository;
 import com.haru.product.product.infrastructure.persistence.ProductCompositionRepository;
 import com.haru.product.product.infrastructure.persistence.ProductCompositionTopologyLock;
+import com.haru.product.product.infrastructure.persistence.PostgreSqlProductSkuGenerator;
 import com.haru.product.product.infrastructure.persistence.ProductRepository;
 import com.haru.product.production.infrastructure.persistence.ProducedLotRepository;
 import com.haru.product.production.infrastructure.persistence.ProductionConsumptionRepository;
@@ -28,6 +29,9 @@ class ProductApplicationTests {
 
 	@MockitoBean
 	private ProductCompositionTopologyLock productCompositionTopologyLock;
+
+	@MockitoBean
+	private PostgreSqlProductSkuGenerator productSkuGenerator;
 
 	@MockitoBean
 	private InventoryLotRepository inventoryLotRepository;
