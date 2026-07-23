@@ -12,6 +12,8 @@ import com.haru.product.inventory.domain.exception.InsufficientInventoryExceptio
 import com.haru.product.inventory.domain.exception.InvalidInventoryAdjustmentException;
 import com.haru.product.inventory.domain.exception.InvalidInventoryLotException;
 import com.haru.product.inventory.domain.exception.InventoryLotNotFoundException;
+import com.haru.product.product.application.exception.InvalidProductSearchRequestException;
+import com.haru.product.product.application.exception.ProductSearchUnavailableException;
 import com.haru.product.product.domain.exception.DuplicateProductComponentException;
 import com.haru.product.product.domain.exception.DuplicateProductSkuException;
 import com.haru.product.product.domain.exception.InvalidProductCompositionException;
@@ -101,6 +103,30 @@ public class ApiExceptionHandler {
 				"Invalid product composition",
 				"INVALID_PRODUCT_COMPOSITION",
 				exception.getMessage(),
+				request);
+	}
+
+	@ExceptionHandler(ProductSearchUnavailableException.class)
+	ProblemDetail handleProductSearchUnavailable(
+			ProductSearchUnavailableException exception,
+			HttpServletRequest request) {
+		return problem(
+				HttpStatus.SERVICE_UNAVAILABLE,
+				"Product search unavailable",
+				"PRODUCT_SEARCH_UNAVAILABLE",
+				"Product search is temporarily unavailable",
+				request);
+	}
+
+	@ExceptionHandler(InvalidProductSearchRequestException.class)
+	ProblemDetail handleInvalidProductSearchRequest(
+			InvalidProductSearchRequestException exception,
+			HttpServletRequest request) {
+		return problem(
+				HttpStatus.BAD_REQUEST,
+				"Request validation failed",
+				"VALIDATION_FAILED",
+				"One or more request values are invalid",
 				request);
 	}
 

@@ -71,10 +71,12 @@ class OpenApiDocumentationTests {
 				.andExpect(jsonPath("$.components.securitySchemes.bearerAuth.type").value("http"))
 				.andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
 				.andExpect(jsonPath("$.security[0].bearerAuth").isArray())
+				.andExpect(jsonPath("$['paths']['/api/products/search']").exists())
 				.andExpect(jsonPath("$['paths']['/api/products/{id}']").exists())
 				.andExpect(jsonPath("$['paths']['/api/inventory/lots/{id}']").exists())
 				.andExpect(jsonPath("$['paths']['/api/production-orders/{id}']").exists())
-				.andExpect(jsonPath("$['paths']['/admin/status']").doesNotExist());
+				.andExpect(jsonPath("$['paths']['/admin/status']").doesNotExist())
+				.andExpect(jsonPath("$['paths']['/admin/search/products/reindex']").doesNotExist());
 
 		mockMvc.perform(get("/v3/api-docs.yaml"))
 				.andExpect(status().isOk())

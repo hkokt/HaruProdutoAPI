@@ -18,12 +18,16 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
+import com.haru.product.product.application.ProductCommandFacade;
+import com.haru.product.product.application.ProductSearchService;
 import com.haru.product.product.application.ProductService;
 import com.haru.product.product.application.dto.AddProductComponentRequest;
 import com.haru.product.product.application.dto.CreateProductRequest;
 import com.haru.product.product.application.dto.ProductCompositionResponse;
 import com.haru.product.product.application.dto.ProductCompositionTreeResponse;
 import com.haru.product.product.application.dto.ProductResponse;
+import com.haru.product.product.application.dto.ProductSearchPageResponse;
+import com.haru.product.product.application.dto.ProductSearchResultResponse;
 import com.haru.product.product.application.dto.UpdateProductComponentRequest;
 import com.haru.product.product.application.dto.UpdateProductRequest;
 import com.haru.product.product.domain.MeasurementUnit;
@@ -31,6 +35,8 @@ import com.haru.product.product.domain.Product;
 import com.haru.product.product.domain.ProductType;
 import com.haru.product.product.domain.exception.DuplicateProductSkuException;
 import com.haru.product.product.domain.exception.ProductNotFoundException;
+import com.haru.product.product.application.exception.ProductSearchUnavailableException;
+import com.haru.product.product.application.exception.InvalidProductSearchRequestException;
 import com.haru.product.shared.exception.ApiExceptionHandler;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -45,20 +51,27 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class ProductControllerTests {
 
 	private ProductService productService;
+	private ProductCommandFacade productCommandFacade;
+	private ProductSearchService productSearchService;
 	private MockMvc mockMvc;
 
 	@BeforeEach
 	void setUp() {
 		productService = mock(ProductService.class);
+		productCommandFacade = mock(ProductCommandFacade.class);
+		productSearchService = mock(ProductSearchService.class);
 		mockMvc = MockMvcBuilders
-				.standaloneSetup(new ProductController(productService))
+				.standaloneSetup(new ProductController(
+						productService,
+						productCommandFacade,
+						productSearchService))
 				.setControllerAdvice(new ApiExceptionHandler())
 				.build();
 	}
 
 	@Test
 	void createsProduct() throws Exception {
-		when(productService.create(any(CreateProductRequest.class))).thenReturn(productResponse());
+		when(productCommandFacade.create(any(CreateProductRequest.class))).thenReturn(productResponse());
 
 		mockMvc.perform(post("/api/products")
 					.contentType(MediaType.APPLICATION_JSON)
@@ -68,13 +81,72 @@ class ProductControllerTests {
 				.andExpect(jsonPath("$.sku").value("PERF-SAKURA-100ML"))
 				.andExpect(jsonPath("$.components").isArray());
 
-		verify(productService).create(any(CreateProductRequest.class));
+		verify(productCommandFacade).create(any(CreateProductRequest.class));
+	}
+
+	@Test
+	void searchesProductsByNameIdOrSku() throws Exception {
+		when(productSearchService.search("sakura", 0, 20))
+				.thenReturn(new ProductSearchPageResponse(
+						List.of(new ProductSearchResultResponse(
+								1L,
+								"Sakura Perfume 100 ml",
+								"PERF-SAKURA-100ML",
+								ProductType.FINISHED_PRODUCT,
+								MeasurementUnit.UNIT,
+								true,
+								12.5)),
+						0,
+						20,
+						1,
+						1));
+
+		mockMvc.perform(get("/api/products/search").param("q", "sakura"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.content[0].id").value(1))
+				.andExpect(jsonPath("$.content[0].name").value("Sakura Perfume 100 ml"))
+				.andExpect(jsonPath("$.content[0].sku").value("PERF-SAKURA-100ML"))
+				.andExpect(jsonPath("$.content[0].score").value(12.5))
+				.andExpect(jsonPath("$.page").value(0))
+				.andExpect(jsonPath("$.size").value(20))
+				.andExpect(jsonPath("$.totalElements").value(1))
+				.andExpect(jsonPath("$.totalPages").value(1));
+
+		verify(productSearchService).search("sakura", 0, 20);
+	}
+
+	@Test
+	void reportsWhenProductSearchIsUnavailable() throws Exception {
+		when(productSearchService.search("sakura", 0, 20))
+				.thenThrow(new ProductSearchUnavailableException("internal Elasticsearch failure"));
+
+		mockMvc.perform(get("/api/products/search").param("q", "sakura"))
+				.andExpect(status().isServiceUnavailable())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.code").value("PRODUCT_SEARCH_UNAVAILABLE"))
+				.andExpect(jsonPath("$.detail").value("Product search is temporarily unavailable"))
+				.andExpect(jsonPath("$.trace").doesNotExist());
+	}
+
+	@Test
+	void rejectsAnInvalidProductSearchRequest() throws Exception {
+		when(productSearchService.search(" ", 0, 0))
+				.thenThrow(new InvalidProductSearchRequestException());
+
+		mockMvc.perform(get("/api/products/search")
+					.param("q", " ")
+					.param("size", "0"))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+
+		verify(productSearchService).search(" ", 0, 0);
 	}
 
 	@Test
 	void getsAndUpdatesProduct() throws Exception {
 		when(productService.getById(1L)).thenReturn(productResponse());
-		when(productService.update(org.mockito.ArgumentMatchers.eq(1L), any(UpdateProductRequest.class)))
+		when(productCommandFacade.update(org.mockito.ArgumentMatchers.eq(1L), any(UpdateProductRequest.class)))
 				.thenReturn(productResponse());
 
 		mockMvc.perform(get("/api/products/1"))
@@ -94,16 +166,16 @@ class ProductControllerTests {
 				.andExpect(status().isNoContent())
 				.andExpect(content().string(""));
 
-		verify(productService).delete(1L);
+		verify(productCommandFacade).delete(1L);
 	}
 
 	@Test
 	void addsUpdatesAndRemovesComponent() throws Exception {
-		when(productService.addComponent(
+		when(productCommandFacade.addComponent(
 				org.mockito.ArgumentMatchers.eq(1L),
 				any(AddProductComponentRequest.class)))
 				.thenReturn(compositionResponse());
-		when(productService.updateComponent(
+		when(productCommandFacade.updateComponent(
 				org.mockito.ArgumentMatchers.eq(1L),
 				org.mockito.ArgumentMatchers.eq(2L),
 				any(UpdateProductComponentRequest.class)))
@@ -125,7 +197,7 @@ class ProductControllerTests {
 		mockMvc.perform(delete("/api/products/1/components/2"))
 				.andExpect(status().isNoContent());
 
-		verify(productService).removeComponent(1L, 2L);
+		verify(productCommandFacade).removeComponent(1L, 2L);
 	}
 
 	@Test
@@ -186,7 +258,7 @@ class ProductControllerTests {
 
 	@Test
 	void returnsConflictForDuplicateSku() throws Exception {
-		when(productService.create(any(CreateProductRequest.class)))
+		when(productCommandFacade.create(any(CreateProductRequest.class)))
 				.thenThrow(new DuplicateProductSkuException("PERF-SAKURA-100ML"));
 
 		mockMvc.perform(post("/api/products")
@@ -199,7 +271,7 @@ class ProductControllerTests {
 
 	@Test
 	void returnsAGenericConflictForAnUnclassifiedDatabaseConstraint() throws Exception {
-		when(productService.create(any(CreateProductRequest.class)))
+		when(productCommandFacade.create(any(CreateProductRequest.class)))
 				.thenThrow(new DataIntegrityViolationException("constraint violation"));
 
 		mockMvc.perform(post("/api/products")

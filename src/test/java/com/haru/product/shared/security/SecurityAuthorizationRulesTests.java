@@ -74,6 +74,8 @@ class SecurityAuthorizationRulesTests {
 	void customerCanReadProducts() throws Exception {
 		mockMvc.perform(get("/api/products/1").with(keycloakJwt(customerJwt())))
 				.andExpect(status().isOk());
+		mockMvc.perform(get("/api/products/search").with(keycloakJwt(customerJwt())))
+				.andExpect(status().isOk());
 		mockMvc.perform(get("/api/products/1/composition").with(keycloakJwt(customerJwt())))
 				.andExpect(status().isOk());
 	}
@@ -143,6 +145,8 @@ class SecurityAuthorizationRulesTests {
 				.andExpect(status().isForbidden());
 		mockMvc.perform(post("/api/production-orders/1/cancel").with(keycloakJwt(customerJwt())))
 				.andExpect(status().isForbidden());
+		mockMvc.perform(post("/admin/search/products/reindex").with(keycloakJwt(customerJwt())))
+				.andExpect(status().isForbidden());
 	}
 
 	@Test
@@ -180,6 +184,8 @@ class SecurityAuthorizationRulesTests {
 
 		mockMvc.perform(get("/admin/status").with(keycloakJwt(adminJwt)))
 				.andExpect(status().isOk());
+		mockMvc.perform(post("/admin/search/products/reindex").with(keycloakJwt(adminJwt)))
+				.andExpect(status().isOk());
 	}
 
 	@Test
@@ -198,6 +204,10 @@ class SecurityAuthorizationRulesTests {
 		mockMvc.perform(get("/api/inventory/lots/1"))
 				.andExpect(status().isUnauthorized());
 		mockMvc.perform(get("/api/production-orders/1"))
+				.andExpect(status().isUnauthorized());
+		mockMvc.perform(get("/api/products/search"))
+				.andExpect(status().isUnauthorized());
+		mockMvc.perform(post("/admin/search/products/reindex"))
 				.andExpect(status().isUnauthorized());
 	}
 
@@ -226,8 +236,18 @@ class SecurityAuthorizationRulesTests {
 	@RestController
 	static class TestEndpoints {
 
+		@GetMapping("/api/products/search")
+		ResponseEntity<Void> searchProducts() {
+			return ResponseEntity.ok().build();
+		}
+
 		@GetMapping("/api/products/{id}")
 		ResponseEntity<Void> getProduct(@PathVariable Long id) {
+			return ResponseEntity.ok().build();
+		}
+
+		@PostMapping("/admin/search/products/reindex")
+		ResponseEntity<Void> reindexProducts() {
 			return ResponseEntity.ok().build();
 		}
 

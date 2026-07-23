@@ -194,6 +194,21 @@ class ProductServiceTests {
 		assertThat(essence.isActive()).isTrue();
 	}
 
+	@Test
+	void returnsANewerSearchVersionWhenDeletingAProduct() {
+		Product product = product(1L, "Perfume Sakura", "PERF-SAKURA", ProductType.FINISHED_PRODUCT);
+		ReflectionTestUtils.setField(product, "version", 4L);
+		when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+
+		var deletion = service.delete(1L);
+
+		assertThat(deletion.id()).isEqualTo(1L);
+		assertThat(deletion.databaseVersion()).isEqualTo(5L);
+		assertThat(deletion.deletedAt()).isNotNull();
+		verify(productRepository).delete(product);
+		verify(productRepository).flush();
+	}
+
 	private void stubCompositionGraph(Product... products) {
 		when(compositionRepository.findAllByParentProductIdIn(
 				anyCollection(),

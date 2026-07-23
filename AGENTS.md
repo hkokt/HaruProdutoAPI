@@ -228,10 +228,21 @@ intentionally.
 | `api-2` | Second Spring instance | network only, `:8080` |
 | `keycloak` | OIDC/JWT under `/auth` | through Nginx |
 | `postgres` | Separate application and Keycloak databases | `127.0.0.1:5432` |
+| `elasticsearch` | Product full-text search index | network only, `:9200` |
 
 Operational details:
 
-- API instances wait for healthy PostgreSQL and Keycloak services.
+- API instances wait for healthy PostgreSQL, Keycloak, and Elasticsearch
+  services.
+- Elasticsearch is a single-node local-development service. It is not exposed
+  on a host port, persists data in `elasticsearch_data`, disables its own
+  security because it is isolated on the backend network, and has conservative
+  CPU, memory, and heap defaults in `docker/.env.example`.
+- The Docker environment enables product reindexing at application startup so
+  an existing PostgreSQL volume is searchable. Both API replicas may perform
+  the idempotent versioned `PUT`s; disable this with
+  `ELASTICSEARCH_REINDEX_ON_STARTUP=false` when startup reindexing is not
+  desired.
 - Nginx routes `/auth/` to Keycloak and all other requests to the APIs.
 - `GET /nginx-health` is the proxy's public health endpoint.
 - The application build uses Maven/Temurin 25; runtime uses Temurin 25 JRE.
@@ -359,6 +370,31 @@ Dockerfile.
   does not carry a version or `If-Match`, so a disconnected client update that
   starts only after another update committed cannot be identified as stale;
   defining that HTTP concurrency contract remains a domain/API decision.
+- PostgreSQL is the source of truth for product search. The non-transactional
+  `ProductCommandFacade` invokes the transactional `ProductService` first and
+  performs the Elasticsearch `PUT` only after that proxy returns, so the
+  database commit precedes indexing. The facade uses `Propagation.NEVER` to
+  reject an accidental surrounding transaction.
+- Search indexing uses strict `version_type=external`; a live document's
+  external version is one greater than the JPA version. Deletes write a
+  tombstone with `deleted=true` at the reserved external fence version
+  `9000000000000000000`, and search queries filter tombstones out. Product IDs
+  are generated and never reused, so no delayed live `PUT` can cross the fence
+  and resurrect a deleted document. A database restore or reseed that reuses
+  IDs must recreate the product index before reindexing. An
+  indexing failure is logged after commit and must not turn a committed
+  database write into an HTTP failure.
+- Composition writes also increment the parent Product version. Their facade
+  operations reload and reindex the parent after commit so version validation
+  does not report a false stale document when only the BOM changed.
+- Product text uses Elasticsearch's Brazilian analyzer. Search combines a
+  boosted exact numeric ID, exact and prefix SKU clauses, and fuzzy
+  name/description matching. Search unavailability returns a sanitized 503
+  `PRODUCT_SEARCH_UNAVAILABLE` response.
+- Docker reindexes persisted database products on startup. The internal admin
+  validation route compares database and index versions; reindex repairs
+  missing/stale documents, while reconcile writes tombstones for orphaned live
+  documents. These operations are paginated and are not part of OpenAPI.
 - Product schema changes belong in sequential Flyway migrations; Hibernate is
   configured with `ddl-auto=validate` and Open Session in View is disabled.
 
@@ -366,6 +402,7 @@ The Product and BOM endpoints are:
 
 ```text
 POST   /api/products
+GET    /api/products/search?q={query}&page={page}&size={size}
 GET    /api/products/{id}
 PUT    /api/products/{id}
 DELETE /api/products/{id}
@@ -373,6 +410,14 @@ POST   /api/products/{id}/components
 PUT    /api/products/{id}/components/{componentId}
 DELETE /api/products/{id}/components/{componentId}
 GET    /api/products/{id}/composition
+```
+
+The internal product-search maintenance endpoints are:
+
+```text
+GET  /admin/search/products/validation
+POST /admin/search/products/reindex
+POST /admin/search/products/reconcile
 ```
 
 Controllers return application DTO records, never JPA entities. Global errors
@@ -537,7 +582,7 @@ relative to the repository and must run from its root.
 `PersistenceHardeningIntegrationTests` use `disabledWithoutDocker = true`, so
 always inspect Maven's skipped-test count; a green build without Docker does
 not prove the PostgreSQL or concurrent paths. With Docker available, the suite
-currently runs all 184 tests successfully with no skipped tests.
+currently runs all 216 tests successfully with no skipped tests.
 
 The persistence-hardening race tests coordinate Spring Data spy calls through
 the transaction-bound `JdbcTemplate` and shared `EntityManager` proxy. Do not

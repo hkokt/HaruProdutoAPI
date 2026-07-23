@@ -1,6 +1,7 @@
 package com.haru.product.product.application;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -21,6 +22,7 @@ import com.haru.product.product.application.dto.AddProductComponentRequest;
 import com.haru.product.product.application.dto.CreateProductRequest;
 import com.haru.product.product.application.dto.ProductCompositionResponse;
 import com.haru.product.product.application.dto.ProductCompositionTreeResponse;
+import com.haru.product.product.application.dto.ProductDeletionResult;
 import com.haru.product.product.application.dto.ProductResponse;
 import com.haru.product.product.application.dto.UpdateProductComponentRequest;
 import com.haru.product.product.application.dto.UpdateProductRequest;
@@ -103,10 +105,15 @@ public class ProductService {
 	}
 
 	@Transactional
-	public void delete(Long id) {
+	public ProductDeletionResult delete(Long id) {
 		Product product = requireProduct(id);
+		ProductDeletionResult deletion = new ProductDeletionResult(
+				product.getId(),
+				Math.incrementExact(product.getVersion()),
+				Instant.now());
 		productRepository.delete(product);
 		productRepository.flush();
+		return deletion;
 	}
 
 	@Transactional

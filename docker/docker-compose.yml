@@ -17,11 +17,18 @@ x-api-common: &api-common
     SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${KEYCLOAK_PUBLIC_URL:-http://localhost/auth}/realms/${KEYCLOAK_REALM:-haru}
     SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/auth/realms/${KEYCLOAK_REALM:-haru}/protocol/openid-connect/certs
     SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: ${KEYCLOAK_AUDIENCE:-haru-api}
+    HARU_SEARCH_ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+    HARU_SEARCH_PRODUCTS_INDEX: ${ELASTICSEARCH_PRODUCTS_INDEX:-haru-products-v1}
+    HARU_SEARCH_REINDEX_ON_STARTUP: ${ELASTICSEARCH_REINDEX_ON_STARTUP:-true}
+    HARU_SEARCH_CONNECT_TIMEOUT: ${ELASTICSEARCH_CONNECT_TIMEOUT:-2s}
+    HARU_SEARCH_READ_TIMEOUT: ${ELASTICSEARCH_READ_TIMEOUT:-5s}
     JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75.0 -XX:+UseContainerSupport}
   depends_on:
     postgres:
       condition: service_healthy
     keycloak:
+      condition: service_healthy
+    elasticsearch:
       condition: service_healthy
   networks:
     - backend
@@ -94,6 +101,37 @@ services:
     networks:
       - backend
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTICSEARCH_VERSION:-9.4.2}
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      cluster.name: haru-product-local
+      node.name: elasticsearch
+      xpack.security.enabled: "false"
+      xpack.ml.enabled: "false"
+      ingest.geoip.downloader.enabled: "false"
+      ES_JAVA_OPTS: ${ELASTICSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    expose:
+      - "9200"
+    mem_limit: ${ELASTICSEARCH_MEMORY_LIMIT:-1g}
+    cpus: ${ELASTICSEARCH_CPUS:-1.0}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl --fail --silent
+          'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s'
+          > /dev/null
+      interval: 10s
+      timeout: 6s
+      retries: 30
+      start_period: 30s
+    networks:
+      - backend
+
   api-1:
     <<: *api-common
     environment:
@@ -122,6 +160,7 @@ services:
 
 volumes:
   postgres_data:
+  elasticsearch_data:
 
 networks:
   backend:
