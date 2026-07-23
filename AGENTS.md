@@ -399,8 +399,11 @@ Dockerfile.
   operations reload and reindex the parent after commit so version validation
   does not report a false stale document when only the BOM changed.
 - Product text uses Elasticsearch's Brazilian analyzer. Search combines a
-  boosted exact numeric ID, exact and prefix SKU clauses, and fuzzy
-  name/description matching. Search unavailability returns a sanitized 503
+  boosted exact numeric ID, exact and prefix SKU clauses,
+  `search_as_you_type` name-prefix matching, and fuzzy name/description
+  matching. The current index generation is `haru-products-v2`; incompatible
+  mapping changes require a new generation and reindexing from PostgreSQL.
+  Search unavailability returns a sanitized 503
   `PRODUCT_SEARCH_UNAVAILABLE` response.
 - Docker reindexes persisted database products on startup. The internal admin
   validation route compares database and index versions; reindex repairs
@@ -566,6 +569,49 @@ POST /api/production-orders/{id}/cancel
 
 ## Test contracts
 
+Automated tests are executable specifications. Preserve valid existing tests
+and fix production code when one of those tests fails. Before changing
+production behavior, run the directly relevant tests when practical to
+establish the baseline. After the change, run the affected tests and the full
+validation suite.
+
+Never make an existing test pass by:
+
+- deleting, disabling, skipping, or excluding it;
+- adding `.only`, disabled annotations, unconditional returns, or swallowed
+  failures;
+- removing assertions or replacing exact assertions with weaker checks;
+- changing expected values merely to match incorrect production behavior;
+- increasing timeouts merely to hide a race condition;
+- mocking the integration boundary that the test exists to exercise;
+- changing Maven or Surefire configuration to avoid executing it.
+
+An existing test may change only when the requested behavior intentionally
+changes its contract, or when the test is demonstrably incorrect, obsolete,
+nondeterministic, or coupled to an implementation detail that is no longer a
+contract. In that case, explain why the previous expectation is invalid,
+preserve or strengthen its coverage, add coverage for the replacement
+behavior, and report the test change explicitly.
+
+New features and bug fixes require meaningful behavior tests. Tests written for
+a new change may be corrected while developing when their initial expectation
+was wrong, but never weakened solely to obtain a green build.
+
+The required final backend validation is:
+
+```bash
+mvn -B -Dmaven.repo.local=/tmp/haru-product-m2 clean verify
+```
+
+Focused Maven tests are useful during development but never replace the final
+`clean verify`. Do not use `-DskipTests`, `-Dmaven.test.skip=true`, test
+exclusions, or disabled annotations as final validation. The complete suite
+must finish with zero failures and zero errors. With Docker available, it must
+also finish with zero skipped tests so the Testcontainers paths are proven.
+If Docker or another required dependency is unavailable, report that as a
+validation blocker or explicit limitation; do not modify tests to conceal it.
+Always report the command executed and its failure, error, and skipped counts.
+
 The suite covers:
 
 - context loading with mocked repositories while DataSource, JPA, and Flyway
@@ -606,8 +652,8 @@ relative to the repository and must run from its root.
 `InventoryServiceIntegrationTests`, `ProductionServiceIntegrationTests`, and
 `PersistenceHardeningIntegrationTests` use `disabledWithoutDocker = true`, so
 always inspect Maven's skipped-test count; a green build without Docker does
-not prove the PostgreSQL or concurrent paths. With Docker available, the suite
-currently runs all 222 tests successfully with no skipped tests.
+not prove the PostgreSQL or concurrent paths. With Docker available, the full
+suite is expected to complete with no skipped tests.
 
 The persistence-hardening race tests coordinate Spring Data spy calls through
 the transaction-bound `JdbcTemplate` and shared `EntityManager` proxy. Do not
