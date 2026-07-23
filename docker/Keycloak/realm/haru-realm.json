@@ -23,14 +23,16 @@
       "standardFlowEnabled": true,
       "redirectUris": [
         "http://localhost/*",
+        "http://localhost:5173/*",
         "https://bookish-fiesta-vjv9rggj4jjcxrvw-80.app.github.dev/*"
       ],
       "webOrigins": [
         "http://localhost",
+        "http://localhost:5173",
         "https://bookish-fiesta-vjv9rggj4jjcxrvw-80.app.github.dev"
       ],
       "attributes": {
-        "post.logout.redirect.uris": "http://localhost/*##https://bookish-fiesta-vjv9rggj4jjcxrvw-80.app.github.dev/*"
+        "post.logout.redirect.uris": "http://localhost/*##http://localhost:5173/*##https://bookish-fiesta-vjv9rggj4jjcxrvw-80.app.github.dev/*"
       },
       "protocolMappers": [
         {
